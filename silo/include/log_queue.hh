@@ -11,6 +11,7 @@ private:
   std::condition_variable cv_deq_;
   std::queue<LogBuffer*> queue_;
   std::size_t capacity_ = 1000;
+  bool quit_ = false;
 
 public:
 
@@ -21,9 +22,10 @@ public:
     cv_deq_.notify_one();
   }
 
-  void wait() {
+  bool wait_deq() {
     std::unique_lock<std::mutex> lock(mutex_);
-    cv_deq_.wait(lock, [this]{return !queue_.empty();});
+    cv_deq_.wait(lock, [this]{return quit_ || !queue_.empty();});
+    return !quit_;
   }
 
   LogBuffer *deq() {
@@ -35,7 +37,12 @@ public:
   }
 
   bool empty() {
-    std::unique_lock<std::mutex> lock(mutex_);
     return queue_.empty();
+  }
+
+  void terminate() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    quit_ = true;
+    cv_deq_.notify_all();
   }
 };

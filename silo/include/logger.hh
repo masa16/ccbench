@@ -21,5 +21,6 @@ public:
 
   void gen_logfile(int thid);
   void add_txn_executor(TxnExecutor *trans);
-  void loop(const bool &quit);
+  void loop();
+  void terminate();
 };

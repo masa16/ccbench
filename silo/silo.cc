@@ -147,9 +147,9 @@ RETRY:
 }
 
 #if DURABLE_EPOCH
-void logger_thread(Logger &logger, const bool &quit) {
+void logger_thread(Logger &logger) {
   logger.gen_logfile(0);
-  logger.loop(quit);
+  logger.loop();
 }
 #endif
 
@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) try {
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(logger),
                      std::ref(start), std::ref(quit));
-  thv.emplace_back(logger_thread, std::ref(logger), std::ref(quit));
+  thv.emplace_back(logger_thread, std::ref(logger));
 #else
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(start),
@@ -181,6 +181,7 @@ int main(int argc, char *argv[]) try {
     sleepMs(1000);
   }
   storeRelease(quit, true);
+  logger.terminate();
   for (auto &th : thv) th.join();
 
   for (unsigned int i = 0; i < FLAGS_thread_num; ++i) {

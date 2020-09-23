@@ -13,11 +13,11 @@ public:
   std::vector<LogRecord> log_set_1;
   std::vector<LogRecord> log_set_2;
   std::vector<LogRecord> *log_set_ = &log_set_1;
-  std::vector<LogRecord> *_log_set_ = &log_set_2;
+  std::vector<LogRecord> *local_log_set_ = &log_set_2;
   LogHeader log_header_1;
   LogHeader log_header_2;
   LogHeader *log_header_ = &log_header_1;
-  LogHeader *_log_header_ = &log_header_2;
+  LogHeader *local_log_header_ = &log_header_2;
   LogQueue  *queue_;
 
   void add(LogRecord &log);

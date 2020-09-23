@@ -2,18 +2,18 @@
 #include "include/log_queue.hh"
 
 void LogBuffer::add(LogRecord &log) {
-  _log_set_->emplace_back(log);
-  _log_header_->chkSum_ += log.computeChkSum();
-  ++_log_header_->logRecNum_;
+  local_log_set_->emplace_back(log);
+  local_log_header_->chkSum_ += log.computeChkSum();
+  ++local_log_header_->logRecNum_;
 }
 
 void LogBuffer::publish() {
-  if (log_set_->empty()  && _log_set_->size() > LOGSET_SIZE / 2) {
+  if (log_set_->empty()  && local_log_set_->size() > LOGSET_SIZE / 2) {
     // prepare write header
-    _log_header_->convertChkSumIntoComplementOnTwo();
+    local_log_header_->convertChkSumIntoComplementOnTwo();
     // swap
-    auto a = _log_header_; _log_header_ = log_header_; log_header_ = a;
-    auto b = _log_set_; _log_set_ = log_set_; log_set_ = b;
+    std::swap(local_log_header_, log_header_);
+    std::swap(local_log_set_, log_set_);
     // enqueue
     queue_->enq(this);
   }

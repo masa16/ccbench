@@ -14,9 +14,8 @@ void Logger::add_txn_executor(TxnExecutor *trans) {
   trans->log_buffer_.queue_ = &queue_;
 }
 
-void Logger::loop(const bool &quit){
-  while(!(queue_.empty() && loadAcquire(quit))) {
-    queue_.wait();
+void Logger::loop(){
+  while(queue_.wait_deq()) {
     // calculate min(ctid_w)
     auto itr = trans_set_.begin();
     Tidword min_ctid = (*itr)->mrctid_;
@@ -25,6 +24,7 @@ void Logger::loop(const bool &quit){
         min_ctid = (*itr)->mrctid_;
       }
     }
+    // write log
     while(!queue_.empty()) {
       auto log_buffer = queue_.deq();
       log_buffer->write(logfile_);
@@ -33,4 +33,9 @@ void Logger::loop(const bool &quit){
     // publish durable_epoch_
     durable_epoch_ = min_ctid.epoch - 1;
   }
+}
+
+
+void Logger::terminate(){
+  queue_.terminate();
 }
