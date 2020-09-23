@@ -4,6 +4,7 @@
 #include <set>
 #include <string_view>
 #include <vector>
+#include <queue>
 
 #include "../../include/fileio.hh"
 #include "../../include/procedure.hh"
@@ -13,6 +14,7 @@
 #include "log.hh"
 #include "silo_op_element.hh"
 #include "tuple.hh"
+#include "log_buffer.hh"
 
 #define LOGSET_SIZE 1000
 
@@ -37,6 +39,10 @@ public:
    * the number of locks in local write set.
    */
   Result *sres_;
+
+#if DURABLE_EPOCH
+  LogBuffer log_buffer_;
+#endif
 
   File logfile_;
 

@@ -261,6 +261,15 @@ bool TxnExecutor::validationPhase() {
   return true;
 }
 
+#if DURABLE_EPOCH
+void TxnExecutor::wal(std::uint64_t ctid) {
+  for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
+    LogRecord log(ctid, (*itr).key_, write_val_);
+    log_buffer_.add(log);
+  }
+  log_buffer_.publish();
+}
+#else
 void TxnExecutor::wal(std::uint64_t ctid) {
   for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
     LogRecord log(ctid, (*itr).key_, write_val_);
@@ -289,6 +298,8 @@ void TxnExecutor::wal(std::uint64_t ctid) {
     log_set_.clear();
   }
 }
+#endif
+
 
 void TxnExecutor::write(std::uint64_t key, std::string_view val) {
 #if ADD_ANALYSIS
@@ -372,4 +383,3 @@ void TxnExecutor::writePhase() {
   read_set_.clear();
   write_set_.clear();
 }
-

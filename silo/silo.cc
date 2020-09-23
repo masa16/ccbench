@@ -19,6 +19,7 @@
 #include "include/result.hh"
 #include "include/transaction.hh"
 #include "include/util.hh"
+#include "include/logger.hh"
 
 #include "../include/atomic_wrapper.hh"
 #include "../include/backoff.hh"
@@ -34,7 +35,12 @@
 
 using namespace std;
 
-void worker(size_t thid, char &ready, const bool &start, const bool &quit) {
+#if DURABLE_EPOCH
+void worker(size_t thid, char &ready, Logger &logger, const bool &start, const bool &quit)
+#else
+void worker(size_t thid, char &ready, const bool &start, const bool &quit)
+#endif
+{
   Result &myres = std::ref(SiloResult[thid]);
   Xoroshiro128Plus rnd;
   rnd.init();
@@ -46,6 +52,9 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit) {
 #endif
 
 #if WAL
+#if DURABLE_EPOCH
+  logger.add_txn_executor(&trans);
+#else
   /*
   const boost::filesystem::path log_dir_path("/tmp/ccbench");
   if (boost::filesystem::exists(log_dir_path)) {
@@ -61,6 +70,7 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit) {
   genLogFile(logpath, thid);
   trans.logfile_.open(logpath, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   trans.logfile_.ftruncate(10 ^ 9);
+#endif
 #endif
 
 #ifdef Linux
@@ -136,6 +146,13 @@ RETRY:
   return;
 }
 
+#if DURABLE_EPOCH
+void logger_thread(Logger &logger, const bool &quit) {
+  logger.gen_logfile(0);
+  logger.loop(quit);
+}
+#endif
+
 int main(int argc, char *argv[]) try {
   gflags::SetUsageMessage("Silo benchmark.");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -147,9 +164,17 @@ int main(int argc, char *argv[]) try {
   initResult();
   std::vector<char> readys(FLAGS_thread_num);
   std::vector<std::thread> thv;
+#if DURABLE_EPOCH
+  Logger logger;
+  for (size_t i = 0; i < FLAGS_thread_num; ++i)
+    thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(logger),
+                     std::ref(start), std::ref(quit));
+  thv.emplace_back(logger_thread, std::ref(logger), std::ref(quit));
+#else
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(start),
                      std::ref(quit));
+#endif
   waitForReady(readys);
   storeRelease(start, true);
   for (size_t i = 0; i < FLAGS_extime; ++i) {

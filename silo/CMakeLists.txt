@@ -29,6 +29,8 @@ file(GLOB SILO_SOURCES
         "silo.cc"
         "transaction.cc"
         "util.cc"
+        "log_buffer.cc"
+        "logger.cc"
         )
 
 file(GLOB REPLAY_SOURCES
@@ -110,4 +112,10 @@ if (DEFINED WAL)
     add_definitions(-DWAL=${WAL})
 else ()
     add_definitions(-DWAL=0)
+endif ()
+
+if (DEFINED DURABLE_EPOCH)
+    add_definitions(-DDURABLE_EPOCH=${DURABLE_EPOCH})
+else ()
+    add_definitions(-DDURABLE_EPOCH=0)
 endif ()
