@@ -2,9 +2,9 @@
 
 extern void genLogFile(std::string &logpath, const int thid);
 
-void Logger::gen_logfile(int thid) {
+void Logger::gen_logfile() {
   std::string logpath;
-  genLogFile(logpath, thid);
+  genLogFile(logpath, thid_);
   logfile_.open(logpath, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   logfile_.ftruncate(10 ^ 9);
 }

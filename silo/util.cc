@@ -40,6 +40,12 @@ void chkArg() {
     cout << "FLAGS_zipf_skew must be 0 ~ 0.999..." << endl;
     ERR;
   }
+#if DURABLE_EPOCH
+  if (FLAGS_thread_num < FLAGS_logger_num) {
+    cout << "FLAGS_logger_num must be <= FLAGS_thread_num..." << endl;
+    ERR;
+  }
+#endif
 
   if (posix_memalign((void **) &ThLocalEpoch, CACHE_LINE_SIZE,
                      FLAGS_thread_num * sizeof(uint64_t_64byte)) != 0)
@@ -87,6 +93,9 @@ void displayParameter() {
   cout << "#FLAGS_rmw:\t\t" << FLAGS_rmw << endl;
   cout << "#FLAGS_rratio:\t\t" << FLAGS_rratio << endl;
   cout << "#FLAGS_thread_num:\t" << FLAGS_thread_num << endl;
+#if DURABLE_EPOCH
+  cout << "#FLAGS_logger_num:\t" << FLAGS_logger_num << endl;
+#endif
   cout << "#FLAGS_tuple_num:\t" << FLAGS_tuple_num << endl;
   cout << "#FLAGS_ycsb:\t\t" << FLAGS_ycsb << endl;
   cout << "#FLAGS_zipf_skew:\t" << FLAGS_zipf_skew << endl;

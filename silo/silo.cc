@@ -36,7 +36,7 @@
 using namespace std;
 
 #if DURABLE_EPOCH
-void worker(size_t thid, char &ready, Logger &logger, const bool &start, const bool &quit)
+void worker(size_t thid, char &ready, Logger *logger, const bool &start, const bool &quit)
 #else
 void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 #endif
@@ -53,7 +53,7 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 
 #if WAL
 #if DURABLE_EPOCH
-  logger.add_txn_executor(&trans);
+  logger->add_txn_executor(&trans);
 #else
   /*
   const boost::filesystem::path log_dir_path("/tmp/ccbench");
@@ -147,9 +147,9 @@ RETRY:
 }
 
 #if DURABLE_EPOCH
-void logger_thread(Logger &logger) {
-  logger.gen_logfile(0);
-  logger.loop();
+void logger_thread(Logger *logger) {
+  logger->gen_logfile();
+  logger->loop();
 }
 #endif
 
@@ -165,11 +165,16 @@ int main(int argc, char *argv[]) try {
   std::vector<char> readys(FLAGS_thread_num);
   std::vector<std::thread> thv;
 #if DURABLE_EPOCH
-  Logger logger;
+  std::vector<Logger*> logv;
+  for (size_t i = 0; i < FLAGS_logger_num; ++i) {
+    logv.push_back(new Logger(i));
+  }
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
-    thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(logger),
+    thv.emplace_back(worker, i, std::ref(readys[i]),
+                     logv[i*FLAGS_logger_num/FLAGS_thread_num],
                      std::ref(start), std::ref(quit));
-  thv.emplace_back(logger_thread, std::ref(logger));
+  for (size_t i = 0; i < FLAGS_logger_num; ++i)
+    thv.emplace_back(logger_thread, logv[i]);
 #else
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(start),
@@ -182,7 +187,7 @@ int main(int argc, char *argv[]) try {
   }
   storeRelease(quit, true);
 #if DURABLE_EPOCH
-  logger.terminate();
+  for (auto &lg : logv) lg->terminate();
 #endif
   for (auto &th : thv) th.join();
 
@@ -192,6 +197,9 @@ int main(int argc, char *argv[]) try {
   ShowOptParameters();
   SiloResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime,
                                  FLAGS_thread_num);
+#if DURABLE_EPOCH
+  for (auto &lg : logv) delete lg;
+#endif
 
   return 0;
 } catch (bad_alloc) {
