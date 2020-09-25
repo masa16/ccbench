@@ -53,12 +53,23 @@ void chkArg() {
   if (posix_memalign((void **) &CTIDW, CACHE_LINE_SIZE,
                      FLAGS_thread_num * sizeof(uint64_t_64byte)) != 0)
     ERR;
+#if DURABLE_EPOCH
+  if (posix_memalign((void **) &ThLocalDurableEpoch, CACHE_LINE_SIZE,
+                     FLAGS_logger_num * sizeof(uint64_t_64byte)) != 0)
+    ERR;
+#endif
 
   // init
   for (unsigned int i = 0; i < FLAGS_thread_num; ++i) {
     ThLocalEpoch[i].obj_ = 0;
     CTIDW[i].obj_ = 0;
   }
+#if DURABLE_EPOCH
+  for (unsigned int i = 0; i < FLAGS_logger_num; ++i) {
+    ThLocalDurableEpoch[i].obj_ = 0;
+  }
+  DurableEpoch.obj_ = 0;
+#endif
 }
 
 bool chkEpochLoaded() {

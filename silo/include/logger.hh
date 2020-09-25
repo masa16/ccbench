@@ -15,7 +15,6 @@ private:
   std::size_t capacity_ = 1000;
 public:
   int thid_;
-  uint64_t durable_epoch_ = 0;
   std::vector<int> thid_set_;
   LogQueue queue_;
   File logfile_;

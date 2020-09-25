@@ -31,10 +31,28 @@ void Logger::loop(){
       log_buffer->write(logfile_);
     }
     logfile_.fsync();
-    // publish durable_epoch_
+    // publish Durable Epoch of this thread
     Tidword tid;
     tid.obj_ = min_ctid;
-    durable_epoch_ = tid.epoch - 1;
+    auto dl = tid.epoch - 1;
+    asm volatile("":: : "memory");
+    __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), dl, __ATOMIC_RELEASE);
+    asm volatile("":: : "memory");
+  }
+  // calculate min(d_l)
+  auto min_dl = ThLocalDurableEpoch[0].obj_;
+  for (unsigned int i=1; i < FLAGS_logger_num; ++i) {
+    auto dl = ThLocalDurableEpoch[i].obj_;
+    if (dl < min_dl) {
+      min_dl = dl;
+    }
+  }
+  // store Durable Epoch
+  auto dl = DurableEpoch.obj_;
+  if (dl != min_dl) {
+    asm volatile("":: : "memory");
+    __atomic_store_n(&(DurableEpoch.obj_), min_dl, __ATOMIC_RELEASE);
+    asm volatile("":: : "memory");
   }
 }
 
