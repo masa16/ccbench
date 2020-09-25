@@ -40,9 +40,7 @@ public:
    */
   Result *sres_;
 
-#if DURABLE_EPOCH
   LogBuffer log_buffer_;
-#endif
 
   File logfile_;
 
@@ -52,6 +50,8 @@ public:
   char write_val_[VAL_SIZE];
   // used by fast approach for benchmark
   char return_val_[VAL_SIZE];
+
+  bool new_epoch_begins_;
 
   TxnExecutor(int thid, Result *sres);
 

@@ -18,10 +18,11 @@ public:
   LogHeader log_header_2;
   LogHeader *log_header_ = &log_header_1;
   LogHeader *local_log_header_ = &log_header_2;
-  LogQueue  *queue_;
+  bool new_epoch_begins_ = false;
+  LogQueue *queue_;
 
   void add(LogRecord &log);
-  void publish();
+  bool publish(bool new_epoch_begins);
   void write(File &logfile);
   //void recycle();
 };

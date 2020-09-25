@@ -15,7 +15,7 @@ private:
   std::size_t capacity_ = 1000;
 public:
   uint64_t durable_epoch_ = 0;
-  std::vector<TxnExecutor*> trans_set_;
+  std::vector<int> thid_set_;
   LogQueue queue_;
   File logfile_;
 

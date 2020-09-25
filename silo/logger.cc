@@ -10,18 +10,19 @@ void Logger::gen_logfile(int thid) {
 }
 
 void Logger::add_txn_executor(TxnExecutor *trans) {
-  trans_set_.push_back(trans);
+  thid_set_.push_back(trans->thid_);
   trans->log_buffer_.queue_ = &queue_;
 }
 
 void Logger::loop(){
   while(queue_.wait_deq()) {
     // calculate min(ctid_w)
-    auto itr = trans_set_.begin();
-    Tidword min_ctid = (*itr)->mrctid_;
-    for (++itr; itr != trans_set_.end(); ++itr) {
-      if ((*itr)->mrctid_ < min_ctid) {
-        min_ctid = (*itr)->mrctid_;
+    auto itr = thid_set_.begin();
+    auto min_ctid = CTIDW[*itr].obj_;
+    for (++itr; itr != thid_set_.end(); ++itr) {
+      auto ctid = CTIDW[*itr].obj_;
+      if (ctid < min_ctid) {
+        min_ctid = ctid;
       }
     }
     // write log
@@ -31,7 +32,9 @@ void Logger::loop(){
     }
     logfile_.fsync();
     // publish durable_epoch_
-    durable_epoch_ = min_ctid.epoch - 1;
+    Tidword tid;
+    tid.obj_ = min_ctid;
+    durable_epoch_ = tid.epoch - 1;
   }
 }
 
