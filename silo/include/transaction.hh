@@ -15,6 +15,7 @@
 #include "silo_op_element.hh"
 #include "tuple.hh"
 #include "log_buffer.hh"
+#include "notifier.hh"
 
 #define LOGSET_SIZE 1000
 
@@ -40,7 +41,7 @@ public:
    */
   Result *sres_;
 
-  LogBuffer log_buffer_;
+  LogBuffer *log_buffer_;
 
   File logfile_;
 
@@ -52,6 +53,9 @@ public:
   char return_val_[VAL_SIZE];
 
   bool new_epoch_begins_;
+
+  NotificationId nid_;
+  std::uint64_t nid_counter_ = 0; // Notification ID
 
   TxnExecutor(int thid, Result *sres);
 

@@ -31,6 +31,7 @@ file(GLOB SILO_SOURCES
         "util.cc"
         "log_buffer.cc"
         "logger.cc"
+        "notifier.cc"
         )
 
 file(GLOB REPLAY_SOURCES

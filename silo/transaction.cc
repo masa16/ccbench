@@ -43,6 +43,7 @@ void TxnExecutor::begin() {
   status_ = TransactionStatus::kInFlight;
   max_wset_.obj_ = 0;
   max_rset_.obj_ = 0;
+  nid_ = NotificationId(nid_counter_++, thid_, rdtscp());
 }
 
 void TxnExecutor::displayWriteSet() {
@@ -268,9 +269,10 @@ bool TxnExecutor::validationPhase() {
 void TxnExecutor::wal(std::uint64_t ctid) {
   for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
     LogRecord log(ctid, (*itr).key_, write_val_);
-    log_buffer_.add(log);
+    log_buffer_->push(log);
   }
-  if (log_buffer_.publish(new_epoch_begins_)) {
+  log_buffer_->push(nid_);
+  if (log_buffer_->publish(new_epoch_begins_)) {
     // store CTIDW
     asm volatile("":: : "memory");
     __atomic_store_n(&(CTIDW[thid_].obj_), ctid, __ATOMIC_RELEASE);

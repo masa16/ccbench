@@ -62,7 +62,7 @@ void chkArg() {
   // init
   for (unsigned int i = 0; i < FLAGS_thread_num; ++i) {
     ThLocalEpoch[i].obj_ = 0;
-    CTIDW[i].obj_ = 0;
+    CTIDW[i].obj_ = ~(uint64_t)0;
   }
 #if DURABLE_EPOCH
   for (unsigned int i = 0; i < FLAGS_logger_num; ++i) {

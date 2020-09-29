@@ -20,6 +20,7 @@
 #include "include/transaction.hh"
 #include "include/util.hh"
 #include "include/logger.hh"
+#include "include/notifier.hh"
 
 #include "../include/atomic_wrapper.hh"
 #include "../include/backoff.hh"
@@ -146,12 +147,6 @@ RETRY:
   return;
 }
 
-#if DURABLE_EPOCH
-void logger_thread(Logger *logger) {
-  logger->gen_logfile();
-  logger->loop();
-}
-#endif
 
 int main(int argc, char *argv[]) try {
   gflags::SetUsageMessage("Silo benchmark.");
@@ -166,15 +161,15 @@ int main(int argc, char *argv[]) try {
   std::vector<std::thread> thv;
 #if DURABLE_EPOCH
   std::vector<Logger*> logv;
-  for (size_t i = 0; i < FLAGS_logger_num; ++i) {
-    logv.push_back(new Logger(i));
-  }
+  Notifier notifier;
+  for (size_t i = 0; i < FLAGS_logger_num; ++i)
+    logv.push_back(new Logger(i,&notifier));
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]),
                      logv[i*FLAGS_logger_num/FLAGS_thread_num],
                      std::ref(start), std::ref(quit));
-  for (size_t i = 0; i < FLAGS_logger_num; ++i)
-    thv.emplace_back(logger_thread, logv[i]);
+  for (auto &lg : logv) lg->run();
+  notifier.run();
 #else
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(start),
@@ -186,10 +181,13 @@ int main(int argc, char *argv[]) try {
     sleepMs(1000);
   }
   storeRelease(quit, true);
+  for (auto &th : thv) th.join();
 #if DURABLE_EPOCH
   for (auto &lg : logv) lg->terminate();
+  for (auto &lg : logv) lg->join();
+  notifier.terminate();
+  notifier.join();
 #endif
-  for (auto &th : thv) th.join();
 
   for (unsigned int i = 0; i < FLAGS_thread_num; ++i) {
     SiloResult[0].addLocalAllResult(SiloResult[i]);
@@ -198,6 +196,7 @@ int main(int argc, char *argv[]) try {
   SiloResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime,
                                  FLAGS_thread_num);
 #if DURABLE_EPOCH
+  notifier.display();
   for (auto &lg : logv) delete lg;
 #endif
 
