@@ -40,7 +40,6 @@ void Logger::logging() {
     __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
     notifier_->push(nid_buffer_);
-    nid_buffer_.clear();
   }
 }
 
@@ -68,9 +67,8 @@ void Logger::terminate() {
 
 void Logger::join() {
   thread_.join();
-  logging(); // final process
-  logfile_.fsync();
 #if 0
+  logging(); // final process
   for(auto itr : log_buffer_map_)
     cout<<itr.first
         <<" : nid_set_.size="<<itr.second->nid_set_->size()

@@ -186,6 +186,7 @@ int main(int argc, char *argv[]) try {
   for (auto &lg : logv) lg->terminate();
   for (auto &lg : logv) lg->join();
   notifier.terminate();
+  for (auto &lg : logv) lg->logging();
   notifier.join();
 #endif
 

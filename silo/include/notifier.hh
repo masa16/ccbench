@@ -24,11 +24,11 @@ private:
   std::condition_variable cv_enq_;
   std::condition_variable cv_deq_;
   std::vector<NotificationId> buffer_;
-  bool quit_ = false;
   std::size_t capa_ = 100000000;
   std::size_t count_ = 0;
   std::size_t latency_ = 0;
   std::size_t push_size_ = 0;
+  bool quit_ = false;
 
   void worker();
 
