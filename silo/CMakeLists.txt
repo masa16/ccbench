@@ -31,6 +31,7 @@ file(GLOB SILO_SOURCES
         "util.cc"
         "log_buffer.cc"
         "logger.cc"
+        "notifier.cc"
         )
 
 file(GLOB REPLAY_SOURCES
@@ -118,4 +119,10 @@ if (DEFINED DURABLE_EPOCH)
     add_definitions(-DDURABLE_EPOCH=${DURABLE_EPOCH})
 else ()
     add_definitions(-DDURABLE_EPOCH=0)
+endif ()
+
+if (DEFINED NOTIFIER_THREAD)
+    add_definitions(-DNOTIFIER_THREAD=${NOTIFIER_THREAD})
+else ()
+    add_definitions(-DNOTIFIER_THREAD=0)
 endif ()

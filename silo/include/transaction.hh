@@ -15,6 +15,7 @@
 #include "silo_op_element.hh"
 #include "tuple.hh"
 #include "log_buffer.hh"
+#include "notifier.hh"
 
 #define LOGSET_SIZE 1000
 std::atomic<uint> MutexLSN;
@@ -41,9 +42,7 @@ public:
    */
   Result *sres_;
 
-#if DURABLE_EPOCH
-  LogBuffer log_buffer_;
-#endif
+  LogBuffer *log_buffer_;
 
   File logfile_;
 
@@ -53,6 +52,11 @@ public:
   char write_val_[VAL_SIZE];
   // used by fast approach for benchmark
   char return_val_[VAL_SIZE];
+
+  bool new_epoch_begins_;
+
+  NotificationId nid_;
+  std::uint64_t nid_counter_ = 0; // Notification ID
 
   TxnExecutor(int thid, Result *sres);
 

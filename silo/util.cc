@@ -40,6 +40,12 @@ void chkArg() {
     cout << "FLAGS_zipf_skew must be 0 ~ 0.999..." << endl;
     ERR;
   }
+#if DURABLE_EPOCH
+  if (FLAGS_thread_num < FLAGS_logger_num) {
+    cout << "FLAGS_logger_num must be <= FLAGS_thread_num..." << endl;
+    ERR;
+  }
+#endif
 
   if (posix_memalign((void **) &ThLocalEpoch, CACHE_LINE_SIZE,
                      FLAGS_thread_num * sizeof(uint64_t_64byte)) != 0)
@@ -47,12 +53,23 @@ void chkArg() {
   if (posix_memalign((void **) &CTIDW, CACHE_LINE_SIZE,
                      FLAGS_thread_num * sizeof(uint64_t_64byte)) != 0)
     ERR;
+#if DURABLE_EPOCH
+  if (posix_memalign((void **) &ThLocalDurableEpoch, CACHE_LINE_SIZE,
+                     FLAGS_logger_num * sizeof(uint64_t_64byte)) != 0)
+    ERR;
+#endif
 
   // init
   for (unsigned int i = 0; i < FLAGS_thread_num; ++i) {
     ThLocalEpoch[i].obj_ = 0;
-    CTIDW[i].obj_ = 0;
+    CTIDW[i].obj_ = ~(uint64_t)0;
   }
+#if DURABLE_EPOCH
+  for (unsigned int i = 0; i < FLAGS_logger_num; ++i) {
+    ThLocalDurableEpoch[i].obj_ = 0;
+  }
+  DurableEpoch.obj_ = 0;
+#endif
 }
 
 bool chkEpochLoaded() {
@@ -87,6 +104,9 @@ void displayParameter() {
   cout << "#FLAGS_rmw:\t\t" << FLAGS_rmw << endl;
   cout << "#FLAGS_rratio:\t\t" << FLAGS_rratio << endl;
   cout << "#FLAGS_thread_num:\t" << FLAGS_thread_num << endl;
+#if DURABLE_EPOCH
+  cout << "#FLAGS_logger_num:\t" << FLAGS_logger_num << endl;
+#endif
   cout << "#FLAGS_tuple_num:\t" << FLAGS_tuple_num << endl;
   cout << "#FLAGS_ycsb:\t\t" << FLAGS_ycsb << endl;
   cout << "#FLAGS_zipf_skew:\t" << FLAGS_zipf_skew << endl;

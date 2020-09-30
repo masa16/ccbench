@@ -44,6 +44,7 @@ void TxnExecutor::begin() {
   status_ = TransactionStatus::kInFlight;
   max_wset_.obj_ = 0;
   max_rset_.obj_ = 0;
+  nid_ = NotificationId(nid_counter_++, thid_, rdtscp());
 }
 
 void TxnExecutor::displayWriteSet() {
@@ -217,9 +218,12 @@ bool TxnExecutor::validationPhase() {
   if (this->status_ == TransactionStatus::kAborted) return false;
 #endif
 
+  uint64_t pre_epoch = ThLocalEpoch[thid_].obj_;
   asm volatile("":: : "memory");
   atomicStoreThLocalEpoch(thid_, atomicLoadGE());
   asm volatile("":: : "memory");
+  uint64_t new_epoch = ThLocalEpoch[thid_].obj_;
+  new_epoch_begins_ = (pre_epoch != new_epoch);
 
   /* Phase 2 abort if any condition of below is satisfied.
    * 1. tid of read_set_ changed from it that was got in Read Phase.
@@ -266,9 +270,15 @@ bool TxnExecutor::validationPhase() {
 void TxnExecutor::wal(std::uint64_t ctid) {
   for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
     LogRecord log(ctid, (*itr).key_, write_val_);
-    log_buffer_.add(log);
+    log_buffer_->push(log);
   }
-  log_buffer_.publish();
+  log_buffer_->push(nid_);
+  if (log_buffer_->publish(new_epoch_begins_)) {
+    // store CTIDW
+    asm volatile("":: : "memory");
+    __atomic_store_n(&(CTIDW[thid_].obj_), ctid, __ATOMIC_RELEASE);
+    asm volatile("":: : "memory");
+  }
 }
 #else
 void TxnExecutor::wal(std::uint64_t ctid) {
