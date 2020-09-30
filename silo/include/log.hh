@@ -9,6 +9,9 @@ class LogHeader {
 public:
   int chkSum_ = 0;
   unsigned int logRecNum_ = 0;
+#ifdef PWAL
+	uint lsn_; // log sequence number
+#endif
   const std::size_t len_val_ = VAL_SIZE;
 
   void init() {

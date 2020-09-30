@@ -34,6 +34,7 @@
 #include "../include/zipf.hh"
 
 using namespace std;
+uint *GlobalLSN;
 
 #if DURABLE_EPOCH
 void worker(size_t thid, char &ready, Logger &logger, const bool &start, const bool &quit)
@@ -164,6 +165,10 @@ int main(int argc, char *argv[]) try {
   initResult();
   std::vector<char> readys(FLAGS_thread_num);
   std::vector<std::thread> thv;
+#if PWAL
+	GlobalLSN = (uint *)calloc(FLAGS_thread_num, sizeof(uint));
+	if (!GlobalLSN) ERR;
+#endif
 #if DURABLE_EPOCH
   Logger logger;
   for (size_t i = 0; i < FLAGS_thread_num; ++i)

@@ -17,6 +17,7 @@
 #include "log_buffer.hh"
 
 #define LOGSET_SIZE 1000
+std::atomic<uint> MutexLSN;
 
 enum class TransactionStatus : uint8_t {
   kInFlight,

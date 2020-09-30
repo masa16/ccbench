@@ -7,6 +7,7 @@
 #include "include/transaction.hh"
 
 extern void displayDB();
+extern uint *GlobalLSN;
 
 TxnExecutor::TxnExecutor(int thid, Result *sres) : thid_(thid), sres_(sres) {
   read_set_.reserve(FLAGS_max_ope);
@@ -300,6 +301,68 @@ void TxnExecutor::wal(std::uint64_t ctid) {
 }
 #endif
 
+bool my_lock_core() {
+	auto lock = MutexLSN.load();
+	if (lock == LockBit) {
+		usleep(1); //backoff
+		return false;
+	}
+	return MutexLSN.compare_exchange_strong(lock, LockBit);
+}
+
+void my_lock(void) {
+	while (true) {
+		bool ok = my_lock_core();
+		if (ok == true) break;
+	}
+}
+
+void my_unlock() {
+	MutexLSN.store(UnlockBit);
+}
+
+uint getLogSeqNum()
+{
+	static uint lsn = 0;
+	uint old_lsn;
+	my_lock();
+	old_lsn = lsn;
+	lsn++;
+	my_unlock();
+
+	return old_lsn;
+}
+
+uint TxnExecutor::pwal(std::uint64_t ctid) {
+  for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
+    LogRecord log(ctid, (*itr).key_, write_val_);
+    log_set_.emplace_back(log);
+    latest_log_header_.chkSum_ += log.computeChkSum();
+    ++latest_log_header_.logRecNum_;
+  }
+	uint lsn = latest_log_header_.lsn_ += getLogSeqNum();
+
+	// prepare write header
+	latest_log_header_.convertChkSumIntoComplementOnTwo();
+
+	// write header
+	logfile_.write((void *) &latest_log_header_, sizeof(LogHeader));
+
+	// write log record
+	// for (auto itr = log_set_.begin(); itr != log_set_.end(); ++itr)
+	//  logfile_.write((void *)&(*itr), sizeof(LogRecord));
+	logfile_.write((void *) &(log_set_[0]),
+								 sizeof(LogRecord) * latest_log_header_.logRecNum_);
+
+	logfile_.fdatasync();
+
+	// clear for next transactions.
+	latest_log_header_.init();
+	log_set_.clear();
+
+	return lsn;
+}
+
 
 void TxnExecutor::write(std::uint64_t key, std::string_view val) {
 #if ADD_ANALYSIS
@@ -366,6 +429,10 @@ void TxnExecutor::writePhase() {
 
 #if WAL
   wal(maxtid.obj_);
+#endif
+
+#if PWAL
+	GlobalLSN[thid] = pwal(maxtid.obj_);
 #endif
 
   // write(record, commit-tid)
