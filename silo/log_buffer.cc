@@ -17,10 +17,10 @@ void LogBuffer::push(NotificationId &nid) {
 bool LogBuffer::publish(bool new_epoch_begins) {
   new_epoch_begins_ = new_epoch_begins_ || new_epoch_begins;
   if (nid_set_->empty() && log_set_->empty() &&
-      (local_log_set_->size() >= LOG_SIZE || new_epoch_begins_)) {
+      (local_log_set_->size() >= LOG_BUFFER_SIZE || new_epoch_begins_)) {
     // prepare write header
     local_log_header_->convertChkSumIntoComplementOnTwo();
-    // swap
+    // swap buffer
     std::swap(local_log_header_, log_header_);
     std::swap(local_log_set_, log_set_);
     std::swap(local_nid_set_, nid_set_);

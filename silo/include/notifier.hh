@@ -25,7 +25,7 @@ private:
   std::condition_variable cv_deq_;
   std::vector<NotificationId> buffer_;
   bool quit_ = false;
-  std::size_t capa_ = 4294967296;
+  std::size_t capa_ = 100000000;
   std::size_t count_ = 0;
   std::size_t latency_ = 0;
   std::size_t push_size_ = 0;
@@ -33,6 +33,9 @@ private:
   void worker();
 
 public:
+  Notifier() {
+    buffer_.reserve(65536);
+  }
   void run();
   void push(std::vector<NotificationId> &nid_buffer);
   void terminate();
