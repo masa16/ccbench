@@ -1,0 +1,4 @@
+/home/river/kioxia/ccbench/silo/build_wal/CMakeFiles/edit_cache.dir
+/home/river/kioxia/ccbench/silo/build_wal/CMakeFiles/replay_test.exe.dir
+/home/river/kioxia/ccbench/silo/build_wal/CMakeFiles/rebuild_cache.dir
+/home/river/kioxia/ccbench/silo/build_wal/CMakeFiles/silo.exe.dir

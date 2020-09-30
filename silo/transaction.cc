@@ -7,7 +7,12 @@
 #include "include/transaction.hh"
 
 extern void displayDB();
+
+#ifdef PWAL
 extern uint *GlobalLSN;
+std::atomic<uint> MutexLSN;
+static constexpr uint LockBit = 0x01;                                                  static constexpr uint UnlockBit = 0x00;
+#endif
 
 TxnExecutor::TxnExecutor(int thid, Result *sres) : thid_(thid), sres_(sres) {
   read_set_.reserve(FLAGS_max_ope);
@@ -311,6 +316,7 @@ void TxnExecutor::wal(std::uint64_t ctid) {
 }
 #endif
 
+#ifdef PWAL
 bool my_lock_core() {
 	auto lock = MutexLSN.load();
 	if (lock == LockBit) {
@@ -372,7 +378,7 @@ uint TxnExecutor::pwal(std::uint64_t ctid) {
 
 	return lsn;
 }
-
+#endif // PWAL
 
 void TxnExecutor::write(std::uint64_t key, std::string_view val) {
 #if ADD_ANALYSIS
