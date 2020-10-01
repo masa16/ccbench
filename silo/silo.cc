@@ -145,7 +145,9 @@ RETRY:
     }
   }
 
+#if DURABLE_EPOCH
   trans.log_buffer_->terminate(); // swith buffer
+#endif
   return;
 }
 
