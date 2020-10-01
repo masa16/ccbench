@@ -18,7 +18,6 @@ private:
   std::size_t capacity_ = 1000;
   std::vector<NotificationId> nid_buffer_;
   Notifier *notifier_;
-  bool quit_ = false;
   unsigned int counter_=0;
   void worker();
 
@@ -34,7 +33,7 @@ public:
 
   void add_txn_executor(TxnExecutor *trans);
   void run();
-  void logging();
+  void logging(bool quit);
   void terminate();
   void join();
 };

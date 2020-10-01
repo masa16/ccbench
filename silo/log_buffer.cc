@@ -32,6 +32,12 @@ bool LogBuffer::publish(bool new_epoch_begins) {
   return false;
 }
 
+void LogBuffer::terminate() {
+  while (!local_log_set_->empty() || !local_nid_set_->empty()) {
+    publish(true);
+  }
+}
+
 void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer) {
   logfile.write((void*)log_header_, sizeof(LogHeader));
   logfile.write((void*)&((*log_set_)[0]), sizeof(LogRecord)*log_header_->logRecNum_);

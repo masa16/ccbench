@@ -36,7 +36,7 @@ void Notifier::run() {
 }
 
 #if NOTIFIER_THREAD
-void Notifier::push(std::vector<NotificationId> &nid_buffer) {
+void Notifier::push(std::vector<NotificationId> &nid_buffer, bool quit) {
   std::unique_lock<std::mutex> lock(mutex_);
   push_size_ = nid_buffer.size();
   cv_enq_.wait(lock, [this]{return buffer_.size() + push_size_ <= capa_;});
@@ -46,9 +46,10 @@ void Notifier::push(std::vector<NotificationId> &nid_buffer) {
   }
   cv_deq_.notify_one();
   nid_buffer.clear();
+  //quit_ = quit_ || quit;
 }
 #else
-void Notifier::push(std::vector<NotificationId> &nid_buffer) {
+void Notifier::push(std::vector<NotificationId> &nid_buffer, bool quit) {
   // calculate min(d_l)
   uint64_t min_dl = __atomic_load_n(&(ThLocalDurableEpoch[0].obj_), __ATOMIC_ACQUIRE);
   for (unsigned int i=1; i < FLAGS_logger_num; ++i) {
@@ -59,7 +60,7 @@ void Notifier::push(std::vector<NotificationId> &nid_buffer) {
   }
   // store Durable Epoch
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
-  if (d < min_dl || quit_) {
+  if (d < min_dl || quit) {
     asm volatile("":: : "memory");
     __atomic_store_n(&(DurableEpoch.obj_), min_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
@@ -100,5 +101,5 @@ void Notifier::display() {
   std::cout << "durable_count:\t\t" << count_ << endl;
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
   std::cout << "durable_epoch:\t\t" << d << endl;
-  //std::cout << "buffer_.size():\t\t" << buffer_.size() << endl;
+  std::cout << "buffer_.size():\t\t" << buffer_.size() << endl;
 }

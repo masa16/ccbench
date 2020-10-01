@@ -37,7 +37,7 @@ public:
     buffer_.reserve(65536);
   }
   void run();
-  void push(std::vector<NotificationId> &nid_buffer);
+  void push(std::vector<NotificationId> &nid_buffer, bool quit);
   void terminate();
   void join();
   void display();

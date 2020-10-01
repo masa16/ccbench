@@ -145,6 +145,7 @@ RETRY:
     }
   }
 
+  trans.log_buffer_->terminate(); // swith buffer
   return;
 }
 
@@ -168,7 +169,7 @@ int main(int argc, char *argv[]) try {
   std::vector<Logger*> logv;
   Notifier notifier;
   for (size_t i = 0; i < FLAGS_logger_num; ++i)
-    logv.push_back(new Logger(i,&notifier));
+    logv.emplace_back(new Logger(i,&notifier));
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]),
                      logv[i*FLAGS_logger_num/FLAGS_thread_num],
@@ -191,7 +192,6 @@ int main(int argc, char *argv[]) try {
   for (auto &lg : logv) lg->terminate();
   for (auto &lg : logv) lg->join();
   notifier.terminate();
-  for (auto &lg : logv) lg->logging();
   notifier.join();
 #endif
 
