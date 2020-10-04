@@ -1,7 +1,10 @@
 #pragma once
+#include <array>
 #include <queue>
 #include <condition_variable>
 #include "../../include/fileio.hh"
+#include "tuple.hh"
+#include "silo_op_element.hh"
 #include "log.hh"
 
 #define LOG_BUFFER_SIZE 10000
@@ -13,34 +16,27 @@ class Notifier;
 
 class LogBuffer {
 private:
-  std::vector<LogRecord> log_set_1;
-  std::vector<LogRecord> log_set_2;
-  LogHeader log_header_1;
-  LogHeader log_header_2;
-  LogHeader *local_log_header_ = &log_header_2;
-  std::vector<NotificationId> nid_set_1;
-  std::vector<NotificationId> nid_set_2;
+  LogHeader log_header_;
+  std::array<std::vector<LogRecord>,2> log_set_;
+  std::array<std::vector<NotificationId>,2> nid_set_;
 public:
-  std::vector<LogRecord> *log_set_ = &log_set_1;
-  std::vector<LogRecord> *local_log_set_ = &log_set_2;
-  LogHeader *log_header_ = &log_header_1;
-  std::vector<NotificationId> *nid_set_ = &nid_set_1;
-  std::vector<NotificationId> *local_nid_set_ = &nid_set_2;
   bool new_epoch_begins_ = false;
   LogQueue *queue_;
+  int id_writing_ = 0;
+  int id_public_ = 1;
 
-  void push(LogRecord &log);
+  void push(uint64_t tid, unsigned int key, char *val);
   void push(NotificationId &nid);
   bool publish(bool new_epoch_begins);
   void write(File &logfile, std::vector<NotificationId> &nid_buffer);
   void terminate();
+  size_t nid_set_size();
 
   LogBuffer() {
-    log_set_1.reserve(LOG_BUFFER_SIZE);
-    log_set_2.reserve(LOG_BUFFER_SIZE);
-    log_header_1.init();
-    log_header_2.init();
-    nid_set_1.reserve(NID_BUFFER_SIZE);
-    nid_set_2.reserve(NID_BUFFER_SIZE);
+    log_set_[0].reserve(LOG_BUFFER_SIZE);
+    log_set_[1].reserve(LOG_BUFFER_SIZE);
+    log_header_.init();
+    nid_set_[0].reserve(NID_BUFFER_SIZE);
+    nid_set_[1].reserve(NID_BUFFER_SIZE);
   }
 };

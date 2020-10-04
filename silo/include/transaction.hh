@@ -41,7 +41,7 @@ public:
    */
   Result *sres_;
 
-  LogBuffer *log_buffer_;
+  LogBuffer log_buffer_;
 
   File logfile_;
 

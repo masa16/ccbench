@@ -29,8 +29,10 @@ void Notifier::worker() {
   }
 }
 
-void Notifier::run() {
+void Notifier::run(int logger_num) {
 #if NOTIFIER_THREAD
+  for (int i=0; i<logger_num; i++)
+    thid_set_.emplace(i);
   thread_ = std::thread([this]{worker();});
 #endif
 }
@@ -78,20 +80,24 @@ void Notifier::push(std::vector<NotificationId> &nid_buffer, bool quit) {
 }
 #endif
 
-void Notifier::terminate() {
-#if NOTIFIER_THREAD
-  std::lock_guard<std::mutex> lock(mutex_);
-  quit_ = true;
-  cv_deq_.notify_all();
-#else
-  quit_ = true;
-#endif
+void Notifier::join() {
+  thread_.join();
+  joined_ = true;
+  cv_finish_.notify_all();
 }
 
-void Notifier::join() {
-#if NOTIFIER_THREAD
-  thread_.join();
-#endif
+void Notifier::finish(int thid) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  thid_set_.erase(thid);
+  if (thid_set_.empty()) {
+    quit_ = true;
+    cv_deq_.notify_all();
+  }
+}
+
+void Notifier::wait_for_join() {
+  std::unique_lock<std::mutex> lock(mutex_);
+  cv_finish_.wait(lock, [this]{return joined_;});
 }
 
 void Notifier::display() {
@@ -101,5 +107,5 @@ void Notifier::display() {
   std::cout << "durable_count:\t\t" << count_ << endl;
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
   std::cout << "durable_epoch:\t\t" << d << endl;
-  std::cout << "buffer_.size():\t\t" << buffer_.size() << endl;
+  //std::cout << "buffer_.size():\t\t" << buffer_.size() << endl;
 }

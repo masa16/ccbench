@@ -38,7 +38,7 @@ using namespace std;
 uint *GlobalLSN;
 
 #if DURABLE_EPOCH
-void worker(size_t thid, char &ready, Logger *logger, const bool &start, const bool &quit)
+void worker(size_t thid, char &ready, std::vector<Logger*> &logv, const bool &start, const bool &quit)
 #else
 void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 #endif
@@ -54,9 +54,7 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 #endif
 
 #if WAL
-#if DURABLE_EPOCH
-  logger->add_txn_executor(&trans);
-#else
+#if !DURABLE_EPOCH
   /*
   const boost::filesystem::path log_dir_path("/tmp/ccbench");
   if (boost::filesystem::exists(log_dir_path)) {
@@ -84,6 +82,11 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 
 #if MASSTREE_USE
   MasstreeWrapper<Tuple>::thread_init(int(thid));
+#endif
+
+#if DURABLE_EPOCH
+  Logger* logger = logv[thid*FLAGS_logger_num/FLAGS_thread_num];
+  logger->add_txn_executor(trans);
 #endif
 
   storeRelease(ready, 1);
@@ -146,11 +149,22 @@ RETRY:
   }
 
 #if DURABLE_EPOCH
-  trans.log_buffer_->terminate(); // swith buffer
+  trans.log_buffer_.terminate(); // swith buffer
+  logger->finish(thid);
+  logger->notifier_.wait_for_join();
 #endif
   return;
 }
 
+#if DURABLE_EPOCH
+void log_worker(int thid, Notifier &notifier, std::vector<Logger*>&logv){
+  Logger logger(thid, notifier);
+  logv[thid] = &logger;
+  logger.worker();
+  notifier.finish(thid);
+  notifier.wait_for_join();
+}
+#endif
 
 int main(int argc, char *argv[]) try {
   gflags::SetUsageMessage("Silo benchmark.");
@@ -168,16 +182,16 @@ int main(int argc, char *argv[]) try {
 	if (!GlobalLSN) ERR;
 #endif
 #if DURABLE_EPOCH
-  std::vector<Logger*> logv;
+  std::vector<Logger*> logv(FLAGS_logger_num);
+  std::vector<std::thread> lthv;
   Notifier notifier;
   for (size_t i = 0; i < FLAGS_logger_num; ++i)
-    logv.emplace_back(new Logger(i,&notifier));
-  for (size_t i = 0; i < FLAGS_thread_num; ++i)
-    thv.emplace_back(worker, i, std::ref(readys[i]),
-                     logv[i*FLAGS_logger_num/FLAGS_thread_num],
-                     std::ref(start), std::ref(quit));
-  for (auto &lg : logv) lg->run();
-  notifier.run();
+    lthv.emplace_back(log_worker, i, std::ref(notifier), std::ref(logv));
+  for (size_t i = 0; i < FLAGS_thread_num; ++i) {
+     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(logv),
+                      std::ref(start), std::ref(quit));
+  }
+  notifier.run(FLAGS_logger_num);
 #else
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(start),
@@ -189,13 +203,11 @@ int main(int argc, char *argv[]) try {
     sleepMs(1000);
   }
   storeRelease(quit, true);
-  for (auto &th : thv) th.join();
 #if DURABLE_EPOCH
-  for (auto &lg : logv) lg->terminate();
-  for (auto &lg : logv) lg->join();
-  notifier.terminate();
   notifier.join();
+  for (auto &th : lthv) th.join();
 #endif
+  for (auto &th : thv) th.join();
 
   for (unsigned int i = 0; i < FLAGS_thread_num; ++i) {
     SiloResult[0].addLocalAllResult(SiloResult[i]);
@@ -205,7 +217,6 @@ int main(int argc, char *argv[]) try {
                                  FLAGS_thread_num);
 #if DURABLE_EPOCH
   notifier.display();
-  for (auto &lg : logv) delete lg;
 #endif
 
   return 0;

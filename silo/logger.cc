@@ -2,19 +2,19 @@
 
 extern void genLogFile(std::string &logpath, const int thid);
 
-void Logger::add_txn_executor(TxnExecutor *trans) {
-  LogBuffer *lb = new LogBuffer;
-  lb->queue_ = &queue_;
-  trans->log_buffer_ = lb;
+void Logger::add_txn_executor(TxnExecutor &trans) {
+  LogBuffer &lb = std::ref(trans.log_buffer_);
+  lb.queue_ = &queue_;
   std::lock_guard<std::mutex> lock(mutex_);
-  log_buffer_map_[trans->thid_] = lb;
-  thid_set_.push_back(trans->thid_);
+  log_buffer_map_[trans.thid_] = &lb;
+  thid_vec_.emplace_back(trans.thid_);
+  thid_set_.emplace(trans.thid_);
 }
 
 void Logger::logging(bool quit) {
   // calculate min(ctid_w)
   uint64_t min_ctid = ~(uint64_t)0;
-  for (auto itr : thid_set_) {
+  for (auto itr : thid_vec_) {
     auto ctid = __atomic_load_n(&(CTIDW[itr].obj_), __ATOMIC_ACQUIRE);
     if (ctid > 0 && ctid < min_ctid) {
       min_ctid = ctid;
@@ -28,7 +28,7 @@ void Logger::logging(bool quit) {
   // write log
   while(!queue_.empty()) {
     auto log_buffer = queue_.deq();
-    counter_ += log_buffer->nid_set_->size();
+    counter_ += log_buffer->nid_set_size();
     log_buffer->write(logfile_, nid_buffer_);
   }
   logfile_.fsync();
@@ -41,7 +41,7 @@ void Logger::logging(bool quit) {
     asm volatile("":: : "memory");
     __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
-    notifier_->push(nid_buffer_, quit);
+    notifier_.push(nid_buffer_, quit);
   }
 }
 
@@ -55,17 +55,17 @@ void Logger::worker(){
   logging(true);
 }
 
-void Logger::run() {
-  thread_ = std::thread([this]{worker();});
-}
-
-void Logger::terminate() {
-  queue_.terminate();
+void Logger::finish(int thid) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  thid_set_.erase(thid);
+  if (thid_set_.empty()) {
+    queue_.terminate();
+  }
 }
 
 void Logger::join() {
   thread_.join();
-#if 1
+#if 0
   for(auto itr : log_buffer_map_)
     cout<<itr.first
         <<" : nid_set_.size="<<itr.second->nid_set_->size()
