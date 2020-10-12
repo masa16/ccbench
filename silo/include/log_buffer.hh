@@ -49,7 +49,6 @@ public:
   void terminate();
 
   LogBufferPool() {
-    printf("BUFFER_NUM=%lu\n",BUFFER_NUM);
     for (int i=0; i<BUFFER_NUM; i++) {
       buffer_.emplace_back(*this);
       pool_.push_back(&buffer_[i]);

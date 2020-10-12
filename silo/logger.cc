@@ -102,7 +102,7 @@ namespace fs = std::filesystem;
 void Logger::worker() {
   logdir_ = std::string("log") + std::to_string(thid_);
   fs::create_directory(logdir_);
-  logpath_ = (fs::path(logdir_) / "data.log").generic_string();
+  logpath_ = fs::path(logdir_) / "data.log";
   logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   logfile_.ftruncate(10 ^ 9);
 
