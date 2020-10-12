@@ -4,51 +4,70 @@
 
 // no lock required since each thread has unique LogBuffer
 
-void LogBuffer::push(uint64_t tid, unsigned int key, char *val) {
-  log_set_[id_writing_].emplace_back(tid, key, val);
+void LogBuffer::push(std::uint64_t tid, NotificationId nid,
+                     std::vector<WriteElement<Tuple>> &write_set,
+                     char *val, bool new_epoch_begins) {
+  // check buffer capa
+  if (log_set_.size() + write_set.size() > LOG_BUFFER_SIZE) {
+    pool_.publish();
+  }
+  // buffering
+  for (auto itr = write_set.begin(); itr != write_set.end(); ++itr) {
+    log_set_.emplace_back(tid, (*itr).key_, val);
+  }
+  nid_set_.emplace_back(nid);
+  // buffer full or new epoch begins
+  if (log_set_.size() == LOG_BUFFER_SIZE ||
+      nid_set_.size() == NID_BUFFER_SIZE || new_epoch_begins) {
+    pool_.publish();
+  }
 }
 
-void LogBuffer::push(NotificationId &nid) {
-  nid_set_[id_writing_].emplace_back(nid);
-}
-
-bool LogBuffer::publish(bool new_epoch_begins) {
-  new_epoch_begins_ = new_epoch_begins_ || new_epoch_begins;
-  if (nid_set_[id_public_].empty() && log_set_[id_public_].empty() &&
-      (log_set_[id_writing_].size() >= LOG_BUFFER_SIZE || new_epoch_begins_)) {
-    // swap buffer
-    std::swap(id_writing_, id_public_);
+void LogBufferPool::publish() {
     // enqueue
-    queue_->enq(this);
-    new_epoch_begins_ = false;
-    return true;
-  }
-  return false;
-}
-
-void LogBuffer::terminate() {
-  while (!log_set_[id_writing_].empty() || !nid_set_[id_writing_].empty()) {
-    publish(true);
+  queue_->enq(current_buffer_);
+  // take buffer from pool
+  std::unique_lock<std::mutex> lock(mutex_);
+  cv_deq_.wait(lock, [this]{return quit_ || !pool_.empty();});
+  if (!pool_.empty()) {
+    current_buffer_ = pool_.back();
+    pool_.pop_back();
   }
 }
 
-void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer) {
+void LogBufferPool::return_buffer(LogBuffer *lb) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  pool_.push_back(lb);
+  cv_deq_.notify_one();
+}
+
+void LogBufferPool::terminate() {
+  quit_ = true;
+  if (!current_buffer_->empty()) {
+    publish();
+  }
+}
+
+size_t LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer) {
   // prepare header
-  log_header_.init();
-  for (auto log : log_set_[id_public_])
-    log_header_.chkSum_ += log.computeChkSum();
-  log_header_.logRecNum_ = log_set_[id_public_].size();
-  log_header_.convertChkSumIntoComplementOnTwo();
+  LogHeader log_header;
+  for (auto log : log_set_)
+    log_header.chkSum_ += log.computeChkSum();
+  log_header.logRecNum_ = log_set_.size();
+  log_header.convertChkSumIntoComplementOnTwo();
   // write to file
-  logfile.write((void*)&log_header_, sizeof(LogHeader));
-  logfile.write((void*)&(log_set_[id_public_][0]), sizeof(LogRecord)*log_header_.logRecNum_);
+  logfile.write((void*)&log_header, sizeof(LogHeader));
+  logfile.write((void*)&(log_set_[0]), sizeof(LogRecord)*log_header.logRecNum_);
   // clear for next transactions.
-  log_set_[id_public_].clear();
+  log_set_.clear();
   // copy NotificationID
-  for (auto nid : nid_set_[id_public_]) nid_buffer.emplace_back(nid);
-  nid_set_[id_public_].clear();
+  for (auto nid : nid_set_) nid_buffer.emplace_back(nid);
+  size_t nid_set_size = nid_set_.size();
+  nid_set_.clear();
+  pool_.return_buffer(this);
+  return nid_set_size;
 }
 
-size_t LogBuffer::nid_set_size() {
-  return nid_set_[id_public_].size();
+bool LogBuffer::empty() {
+  return nid_set_.empty();
 }

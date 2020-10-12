@@ -30,7 +30,7 @@ void Notifier::worker() {
 }
 
 void Notifier::run(int logger_num) {
-#if NOTIFIER_THREAD
+#if !NOTIFIER_THREAD
   for (int i=0; i<logger_num; i++)
     thid_set_.emplace(i);
   thread_ = std::thread([this]{worker();});

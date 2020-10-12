@@ -10,6 +10,62 @@
 #include "transaction.hh"
 #include "notifier.hh"
 
+class LoggerNode {
+public:
+  int logger_cpu_;
+  std::vector<int> worker_cpu_;
+
+  LoggerNode() {}
+  LoggerNode(std::string s) {
+    unsigned x = 0;
+    size_t i = 0;
+    for (; i<s.size(); ++i) {
+      auto c = s[i];
+      if (c>='0' && c<='9') {
+        x = x*10 + (c-'0');
+      }
+      else if (c==':') {
+        logger_cpu_ = x;
+        ++i;
+        break;
+      }
+      else {
+        std::cerr << "parse error" << std::endl;
+        std::abort();
+      }
+    }
+    x = 0;
+    for (; i<s.size(); ++i) {
+      auto c = s[i];
+      if (c>='0' && c<='9') {
+        x = x*10 + (c-'0');
+        if (i == s.size()-1) {
+          worker_cpu_.push_back(x);
+        }
+      }
+      else if (c==',') {
+        worker_cpu_.push_back(x);
+        x = 0;
+      }
+      else {
+        std::cerr << "parse error" << std::endl;
+        std::abort();
+      }
+    }
+  }
+};
+
+
+class LoggerAffinity {
+public:
+  std::vector<LoggerNode> nodes_;
+  unsigned worker_num_=0;
+  unsigned logger_num_=0;
+  void init(std::string s);
+  void init(unsigned worker_num, unsigned logger_num);
+};
+
+
 class Logger {
 private:
   std::mutex mutex_;
@@ -27,7 +83,7 @@ public:
   LogQueue queue_;
   File logfile_;
   Notifier &notifier_;
-  std::unordered_map<int, LogBuffer*> log_buffer_map_;
+  std::unordered_map<int, LogBufferPool*> log_buffer_pool_map_;
 
   Logger(int i, Notifier &n) : thid_(i), notifier_(n) {}
   //~Logger() {for(auto itr : log_buffer_map_) delete itr.second;}

@@ -38,11 +38,16 @@ using namespace std;
 uint *GlobalLSN;
 
 #if DURABLE_EPOCH
-void worker(size_t thid, char &ready, std::vector<Logger*> &logv, const bool &start, const bool &quit)
+void worker(size_t thid, char &ready, const bool &start, const bool &quit, Logger **logp)
+{
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  if (!FLAGS_affinity.empty()) {
+    std::cout << "Worker #" << thid << ": on CPU " << sched_getcpu() << "\n";
+  }
 #else
 void worker(size_t thid, char &ready, const bool &start, const bool &quit)
-#endif
 {
+#endif
   Result &myres = std::ref(SiloResult[thid]);
   Xoroshiro128Plus rnd;
   rnd.init();
@@ -85,7 +90,7 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 #endif
 
 #if DURABLE_EPOCH
-  Logger* logger = logv[thid*FLAGS_logger_num/FLAGS_thread_num];
+  Logger* logger = *logp;
   logger->add_txn_executor(trans);
 #endif
 
@@ -149,7 +154,7 @@ RETRY:
   }
 
 #if DURABLE_EPOCH
-  trans.log_buffer_.terminate(); // swith buffer
+  trans.log_buffer_pool_.terminate(); // swith buffer
   logger->finish(thid);
   logger->notifier_.wait_for_join();
 #endif
@@ -157,18 +162,43 @@ RETRY:
 }
 
 #if DURABLE_EPOCH
-void log_worker(int thid, Notifier &notifier, std::vector<Logger*>&logv){
-  Logger logger(thid, notifier);
-  logv[thid] = &logger;
+void logger_th(int thid, Notifier &notifier, Logger** logp){
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  if (!FLAGS_affinity.empty()) {
+    std::cout << "Logger #" << thid << ": on CPU " << sched_getcpu() << "\n";
+  }
+  alignas(CACHE_LINE_SIZE) Logger logger(thid, notifier);
+  *logp = &logger;
   logger.worker();
   notifier.finish(thid);
   notifier.wait_for_join();
+}
+
+void set_cpu(std::thread &th, int cpu) {
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(cpu, &cpuset);
+  int rc = pthread_setaffinity_np(th.native_handle(),
+                                  sizeof(cpu_set_t), &cpuset);
+  if (rc != 0) {
+    std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+  }
 }
 #endif
 
 int main(int argc, char *argv[]) try {
   gflags::SetUsageMessage("Silo benchmark.");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
+#if DURABLE_EPOCH
+  LoggerAffinity affin;
+  if (FLAGS_affinity.empty()) {
+    affin.init(FLAGS_thread_num,FLAGS_logger_num);
+  } else {
+    affin.init(FLAGS_affinity);
+    FLAGS_thread_num = affin.worker_num_;
+    FLAGS_logger_num = affin.logger_num_;
+  }
+#endif
   chkArg();
   makeDB();
 
@@ -182,14 +212,24 @@ int main(int argc, char *argv[]) try {
 	if (!GlobalLSN) ERR;
 #endif
 #if DURABLE_EPOCH
-  std::vector<Logger*> logv(FLAGS_logger_num);
-  std::vector<std::thread> lthv;
+  Logger *logs[FLAGS_logger_num];
   Notifier notifier;
-  for (size_t i = 0; i < FLAGS_logger_num; ++i)
-    lthv.emplace_back(log_worker, i, std::ref(notifier), std::ref(logv));
-  for (size_t i = 0; i < FLAGS_thread_num; ++i) {
-     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(logv),
-                      std::ref(start), std::ref(quit));
+  std::vector<std::thread> lthv;
+
+  int i=0, j=0;
+  for (auto itr = affin.nodes_.begin(); itr != affin.nodes_.end(); ++itr,++j) {
+    int lcpu = itr->logger_cpu_;
+    lthv.emplace_back(logger_th, j, std::ref(notifier), &(logs[j]));
+    if (!FLAGS_affinity.empty()) {
+      set_cpu(lthv.back(), lcpu);
+    }
+    for (auto wcpu = itr->worker_cpu_.begin(); wcpu != itr->worker_cpu_.end(); ++wcpu,++i) {
+      thv.emplace_back(worker, i, std::ref(readys[i]),
+                       std::ref(start), std::ref(quit), &(logs[j]));
+      if (!FLAGS_affinity.empty()) {
+        set_cpu(thv.back(), *wcpu);
+      }
+    }
   }
   notifier.run(FLAGS_logger_num);
 #else

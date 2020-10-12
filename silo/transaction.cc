@@ -273,11 +273,8 @@ bool TxnExecutor::validationPhase() {
 
 #if DURABLE_EPOCH
 void TxnExecutor::wal(std::uint64_t ctid) {
-  for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
-    log_buffer_.push(ctid, (*itr).key_, write_val_);
-  }
-  log_buffer_.push(nid_);
-  if (log_buffer_.publish(new_epoch_begins_)) {
+  log_buffer_pool_.current_buffer_->push(ctid, nid_, write_set_, write_val_, new_epoch_begins_);
+  if (new_epoch_begins_) {
     // store CTIDW
     asm volatile("":: : "memory");
     __atomic_store_n(&(CTIDW[thid_].obj_), ctid, __ATOMIC_RELEASE);

@@ -2,11 +2,61 @@
 
 extern void genLogFile(std::string &logpath, const int thid);
 
+void LoggerAffinity::init(std::string s) {
+  size_t start=0, pos, len;
+  worker_num_ = 0;
+  logger_num_ = 0;
+  while (start < s.size()) {
+    pos = s.find("+",start);
+    if (pos == std::string::npos)
+      len = s.size() - start;
+    else
+      len = pos - start;
+    if (len>0) {
+      nodes_.emplace_back(s.substr(start,len));
+      worker_num_ += nodes_.back().worker_cpu_.size();
+      logger_num_ += 1;
+    }
+    if (pos == std::string::npos)
+      break;
+    start = pos + 1;
+  }
+}
+
+void LoggerAffinity::init(unsigned worker_num, unsigned logger_num) {
+  unsigned num_cpus = std::thread::hardware_concurrency();
+  if (logger_num > num_cpus || worker_num > num_cpus) {
+    std::cerr << "too many threads" << std::endl;
+  }
+  worker_num_ = worker_num;
+  logger_num_ = logger_num;
+  for (unsigned i=0; i<logger_num; i++) {
+    nodes_.emplace_back();
+  }
+  unsigned thread_num = logger_num + worker_num;
+  if (thread_num > num_cpus) {
+    for (unsigned i=0; i<worker_num; i++) {
+      nodes_[i*logger_num/worker_num].worker_cpu_.emplace_back(i);
+    }
+    for (unsigned i=0; i<logger_num; i++) {
+      nodes_[i].logger_cpu_ = nodes_[i].worker_cpu_.back();
+    }
+  } else {
+    for (unsigned i=0; i<thread_num; i++) {
+      nodes_[i*logger_num/thread_num].worker_cpu_.emplace_back(i);
+    }
+    for (unsigned i=0; i<logger_num; i++) {
+      nodes_[i].logger_cpu_ = nodes_[i].worker_cpu_.back();
+      nodes_[i].worker_cpu_.pop_back();
+    }
+  }
+}
+
 void Logger::add_txn_executor(TxnExecutor &trans) {
-  LogBuffer &lb = std::ref(trans.log_buffer_);
-  lb.queue_ = &queue_;
+  LogBufferPool &pool = std::ref(trans.log_buffer_pool_);
+  pool.queue_ = &queue_;
   std::lock_guard<std::mutex> lock(mutex_);
-  log_buffer_map_[trans.thid_] = &lb;
+  log_buffer_pool_map_[trans.thid_] = &pool;
   thid_vec_.emplace_back(trans.thid_);
   thid_set_.emplace(trans.thid_);
 }
@@ -28,8 +78,7 @@ void Logger::logging(bool quit) {
   // write log
   while(!queue_.empty()) {
     auto log_buffer = queue_.deq();
-    counter_ += log_buffer->nid_set_size();
-    log_buffer->write(logfile_, nid_buffer_);
+    counter_ += log_buffer->write(logfile_, nid_buffer_);
   }
   logfile_.fsync();
   //usleep(1000000); // increase latency
