@@ -9,7 +9,7 @@
 
 #define LOG_BUFFER_SIZE (512000/sizeof(LogRecord))
 #define NID_BUFFER_SIZE (51200/sizeof(LogRecord))
-#define BUFFER_NUM (268435456/LOG_BUFFER_SIZE)
+#define BUFFER_NUM (268435456/LOG_BUFFER_SIZE/4)
 
 class LogQueue;
 class NotificationId;

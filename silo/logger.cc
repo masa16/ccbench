@@ -90,18 +90,37 @@ void Logger::logging(bool quit) {
     asm volatile("":: : "memory");
     __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
+    // rotate logfile
+    if (new_dl >= rotate_epoch_ + 100)
+      rotate_logfile(new_dl);
     notifier_.push(nid_buffer_, quit);
   }
 }
 
-void Logger::worker(){
-  std::string logpath;
-  genLogFile(logpath, thid_);
-  logfile_.open(logpath, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+namespace fs = std::filesystem;
+
+void Logger::worker() {
+  logdir_ = std::string("log") + std::to_string(thid_);
+  fs::create_directory(logdir_);
+  logpath_ = (fs::path(logdir_) / "data.log").generic_string();
+  logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   logfile_.ftruncate(10 ^ 9);
 
   while(queue_.wait_deq()) logging(false);
   logging(true);
+}
+
+// log rotation is described in SiloR paper
+void Logger::rotate_logfile(uint64_t epoch) {
+  // close
+  logfile_.close();
+  // rename
+  fs::path path = fs::path(logdir_) / ("old_data."+std::to_string(epoch));
+  fs::rename(logpath_, path);
+  rotate_epoch_ = epoch;
+  // open
+  logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+  logfile_.ftruncate(10 ^ 9);
 }
 
 void Logger::finish(int thid) {
