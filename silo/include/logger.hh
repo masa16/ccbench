@@ -3,7 +3,6 @@
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
-#include <filesystem>
 #include "../../include/fileio.hh"
 #include "log.hh"
 #include "log_buffer.hh"
@@ -73,18 +72,25 @@ private:
   std::thread thread_;
   std::condition_variable cv_enq_;
   std::condition_variable cv_deq_;
+  std::condition_variable cv_finish_;
+  bool joined_ = false;
   std::size_t capacity_ = 1000;
   std::vector<NotificationId> nid_buffer_;
   unsigned int counter_=0;
+
+  void logging(bool quit);
+  void rotate_logfile(uint64_t epoch);
+  void show_result();
 
 public:
   int thid_;
   std::vector<int> thid_vec_;
   std::unordered_set<int> thid_set_;
   LogQueue queue_;
+  size_t max_buffers_ = 0;
   File logfile_;
-  std::filesystem::path logdir_;
-  std::filesystem::path logpath_;
+  std::string logdir_;
+  std::string logpath_;
   std::uint64_t rotate_epoch_ = 0;
   Notifier &notifier_;
   std::unordered_map<int, LogBufferPool*> log_buffer_pool_map_;
@@ -94,8 +100,6 @@ public:
 
   void add_txn_executor(TxnExecutor &trans);
   void worker();
-  void logging(bool quit);
-  void rotate_logfile(uint64_t epoch);
-  void finish(int thid);
-  void join();
+  void finish_txn(int thid);
+  void thread_end();
 };

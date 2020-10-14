@@ -9,7 +9,8 @@
 
 #define LOG_BUFFER_SIZE (512000/sizeof(LogRecord))
 #define NID_BUFFER_SIZE (51200/sizeof(LogRecord))
-#define BUFFER_NUM (268435456/LOG_BUFFER_SIZE/4)
+#define BUFFER_NUM (268435456/LOG_BUFFER_SIZE/20)
+//#define BUFFER_NUM 20
 
 class LogQueue;
 class NotificationId;
@@ -49,8 +50,11 @@ public:
   void terminate();
 
   LogBufferPool() {
+    buffer_.reserve(BUFFER_NUM);
     for (int i=0; i<BUFFER_NUM; i++) {
       buffer_.emplace_back(*this);
+    }
+    for (int i=0; i<BUFFER_NUM; i++) {
       pool_.push_back(&buffer_[i]);
     }
     current_buffer_ = pool_.back();

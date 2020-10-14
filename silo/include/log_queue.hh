@@ -38,8 +38,11 @@ public:
   }
 
   bool empty() {
-    std::lock_guard<std::mutex> lock(mutex_);
     return queue_.empty();
+  }
+
+  size_t size() {
+    return queue_.size();
   }
 
   void terminate() {

@@ -24,9 +24,11 @@ void LogBuffer::push(std::uint64_t tid, NotificationId nid,
 }
 
 void LogBufferPool::publish() {
-    // enqueue
+  // enqueue
   queue_->enq(current_buffer_);
   // take buffer from pool
+  if (pool_.empty())
+    std::cerr << "LogBufferPool is empty." << std::endl;
   std::unique_lock<std::mutex> lock(mutex_);
   cv_deq_.wait(lock, [this]{return quit_ || !pool_.empty();});
   if (!pool_.empty()) {
@@ -36,8 +38,9 @@ void LogBufferPool::publish() {
 }
 
 void LogBufferPool::return_buffer(LogBuffer *lb) {
+  if (quit_) return;
   std::lock_guard<std::mutex> lock(mutex_);
-  pool_.push_back(lb);
+  pool_.emplace_back(lb);
   cv_deq_.notify_one();
 }
 

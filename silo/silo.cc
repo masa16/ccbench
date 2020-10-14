@@ -155,8 +155,7 @@ RETRY:
 
 #if DURABLE_EPOCH
   trans.log_buffer_pool_.terminate(); // swith buffer
-  logger->finish(thid);
-  logger->notifier_.wait_for_join();
+  logger->finish_txn(thid);
 #endif
   return;
 }
@@ -170,8 +169,9 @@ void logger_th(int thid, Notifier &notifier, Logger** logp){
   alignas(CACHE_LINE_SIZE) Logger logger(thid, notifier);
   *logp = &logger;
   logger.worker();
-  notifier.finish(thid);
-  notifier.wait_for_join();
+  // ending
+  notifier.finish_log(thid);
+  logger.thread_end();
 }
 
 void set_cpu(std::thread &th, int cpu) {
@@ -253,11 +253,11 @@ int main(int argc, char *argv[]) try {
     SiloResult[0].addLocalAllResult(SiloResult[i]);
   }
   ShowOptParameters();
-  SiloResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime,
-                                 FLAGS_thread_num);
 #if DURABLE_EPOCH
   notifier.display();
 #endif
+  SiloResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime,
+                                 FLAGS_thread_num);
 
   return 0;
 } catch (bad_alloc) {

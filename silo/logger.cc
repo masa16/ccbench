@@ -1,4 +1,6 @@
 #include "include/logger.hh"
+#include <sys/stat.h>
+#include <sys/types.h>
 
 extern void genLogFile(std::string &logpath, const int thid);
 
@@ -77,6 +79,8 @@ void Logger::logging(bool quit) {
 
   // write log
   while(!queue_.empty()) {
+    auto sz = queue_.size();
+    if (max_buffers_ < sz) max_buffers_ = sz;
     auto log_buffer = queue_.deq();
     counter_ += log_buffer->write(logfile_, nid_buffer_);
   }
@@ -97,17 +101,21 @@ void Logger::logging(bool quit) {
   }
 }
 
-namespace fs = std::filesystem;
-
 void Logger::worker() {
-  logdir_ = std::string("log") + std::to_string(thid_);
-  fs::create_directory(logdir_);
-  logpath_ = fs::path(logdir_) / "data.log";
+  logdir_ = "log" + std::to_string(thid_);
+  struct stat statbuf;
+  if (::stat(logdir_.c_str(), &statbuf)) {
+    if (::mkdir(logdir_.c_str(), 0755)) ERR;
+  } else {
+    if ((statbuf.st_mode & S_IFMT) != S_IFDIR) ERR;
+  }
+  logpath_ = logdir_ + "/data.log";
   logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   logfile_.ftruncate(10 ^ 9);
 
   while(queue_.wait_deq()) logging(false);
   logging(true);
+  show_result();
 }
 
 // log rotation is described in SiloR paper
@@ -115,24 +123,31 @@ void Logger::rotate_logfile(uint64_t epoch) {
   // close
   logfile_.close();
   // rename
-  fs::path path = fs::path(logdir_) / ("old_data."+std::to_string(epoch));
-  fs::rename(logpath_, path);
+  std::string path = logdir_ + "/old_data." + std::to_string(epoch);
+  if (::rename(logpath_.c_str(), path.c_str())) ERR;
   rotate_epoch_ = epoch;
   // open
   logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   logfile_.ftruncate(10 ^ 9);
 }
 
-void Logger::finish(int thid) {
-  std::lock_guard<std::mutex> lock(mutex_);
+void Logger::finish_txn(int thid) {
+  std::unique_lock<std::mutex> lock(mutex_);
   thid_set_.erase(thid);
   if (thid_set_.empty()) {
     queue_.terminate();
   }
+  cv_finish_.wait(lock, [this]{return joined_;});
 }
 
-void Logger::join() {
-  thread_.join();
+void Logger::thread_end() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  joined_ = true;
+  cv_finish_.notify_all();
+}
+
+void Logger::show_result() {
+  cout << "Logger#"<<thid_<<":\tmax_buffers:\t" << max_buffers_ << endl;
 #if 0
   for(auto itr : log_buffer_map_)
     cout<<itr.first

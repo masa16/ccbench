@@ -38,11 +38,11 @@ public:
   Notifier() {
     buffer_.reserve(65536);
   }
+  void make_durable(std::vector<NotificationId> &nid_buffer, bool quit);
   void worker();
   void run(int thread_num);
   void push(std::vector<NotificationId> &nid_buffer, bool quit);
   void join();
+  void finish_log(int thid);
   void display();
-  void finish(int thid);
-  void wait_for_join();
 };
