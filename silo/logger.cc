@@ -64,6 +64,9 @@ void Logger::add_txn_executor(TxnExecutor &trans) {
 }
 
 void Logger::logging(bool quit) {
+  size_t q_size = queue_.size();
+  if (max_buffers_ < q_size) max_buffers_ = q_size;
+  if (q_size > FLAGS_thread_num) q_size = FLAGS_thread_num;
   // calculate min(ctid_w)
   uint64_t min_ctid = ~(uint64_t)0;
   for (auto itr : thid_vec_) {
@@ -80,9 +83,7 @@ void Logger::logging(bool quit) {
   // write log
   std::uint64_t t = rdtscp();
   if (write_start_==0) write_start_ = t;
-  while(!queue_.empty()) {
-    auto sz = queue_.size();
-    if (max_buffers_ < sz) max_buffers_ = sz;
+  for (size_t i=0; i<q_size; ++i) {
     auto log_buffer = queue_.deq();
     log_buffer->write(logfile_, nid_buffer_, nid_count_, byte_count_);
   }
@@ -93,15 +94,16 @@ void Logger::logging(bool quit) {
 
   // publish Durable Epoch of this thread
   auto new_dl = tid.epoch - 1;
-  auto old_dl = ThLocalDurableEpoch[thid_].obj_;
+  auto old_dl = __atomic_load_n(&(ThLocalDurableEpoch[thid_].obj_), __ATOMIC_ACQUIRE);
   if (new_dl != old_dl || quit) {
     asm volatile("":: : "memory");
     __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
     // rotate logfile
-    if (new_dl >= rotate_epoch_ + 100)
+    if (new_dl >= rotate_epoch_)
       rotate_logfile(new_dl);
-    notifier_.push(nid_buffer_, quit);
+    if (!nid_buffer_.empty())
+      notifier_.push(nid_buffer_, quit);
   }
 }
 
@@ -124,6 +126,9 @@ void Logger::worker() {
     logging(false);
   }
   logging(true);
+  // ending
+  notifier_.logger_end(this);
+  logger_end();
   show_result();
 }
 
@@ -134,7 +139,7 @@ void Logger::rotate_logfile(uint64_t epoch) {
   // rename
   std::string path = logdir_ + "/old_data." + std::to_string(epoch);
   if (::rename(logpath_.c_str(), path.c_str())) ERR;
-  rotate_epoch_ = epoch;
+  rotate_epoch_ = (epoch+100)/100*100;
   // open
   logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   logfile_.ftruncate(10 ^ 9);

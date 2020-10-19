@@ -7,6 +7,7 @@
 void LogBuffer::push(std::uint64_t tid, NotificationId nid,
                      std::vector<WriteElement<Tuple>> &write_set,
                      char *val, bool new_epoch_begins) {
+  nid.tx_end_ = rdtscp();
   // check buffer capa
   if (log_set_.size() + write_set.size() > LOG_BUFFER_SIZE) {
     pool_.publish();
@@ -23,18 +24,27 @@ void LogBuffer::push(std::uint64_t tid, NotificationId nid,
   }
 }
 
+static std::mutex smutex;
+static bool first = true;
+
 void LogBufferPool::publish() {
   // enqueue
   queue_->enq(current_buffer_);
+  // pool empty message
+  if (pool_.empty() && first) {
+    std::lock_guard<std::mutex> lock(smutex);
+    if (first) {
+      std::cerr << "Log storage limits performance." << std::endl;
+      first = false;
+    }
+  }
   // take buffer from pool
-  if (pool_.empty())
-    std::cerr << "LogBufferPool is empty." << std::endl;
+  uint64_t t = rdtscp();
   std::unique_lock<std::mutex> lock(mutex_);
   cv_deq_.wait(lock, [this]{return quit_ || !pool_.empty();});
-  if (!pool_.empty()) {
-    current_buffer_ = pool_.back();
-    pool_.pop_back();
-  }
+  back_pressure_ += rdtscp() - t;
+  current_buffer_ = pool_.back();
+  pool_.pop_back();
 }
 
 void LogBufferPool::return_buffer(LogBuffer *lb) {
@@ -44,11 +54,12 @@ void LogBufferPool::return_buffer(LogBuffer *lb) {
   cv_deq_.notify_one();
 }
 
-void LogBufferPool::terminate() {
+void LogBufferPool::terminate(Result &myres) {
   quit_ = true;
   if (!current_buffer_->empty()) {
     publish();
   }
+  myres.local_back_pressure_latency_ = back_pressure_;
 }
 
 void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer,

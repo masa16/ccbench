@@ -41,9 +41,11 @@ uint *GlobalLSN;
 void worker(size_t thid, char &ready, const bool &start, const bool &quit, Logger **logp)
 {
   std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#if 0
   if (!FLAGS_affinity.empty()) {
     std::cout << "Worker #" << thid << ": on CPU " << sched_getcpu() << "\n";
   }
+#endif
 #else
 void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 {
@@ -154,7 +156,7 @@ RETRY:
   }
 
 #if DURABLE_EPOCH
-  trans.log_buffer_pool_.terminate(); // swith buffer
+  trans.log_buffer_pool_.terminate(myres); // swith buffer
   logger->worker_end(thid);
 #endif
   return;
@@ -163,16 +165,15 @@ RETRY:
 #if DURABLE_EPOCH
 void logger_th(int thid, Notifier &notifier, Logger** logp){
   std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#if 0
   if (!FLAGS_affinity.empty()) {
     std::cout << "Logger #" << thid << ": on CPU " << sched_getcpu() << "\n";
   }
+#endif
   alignas(CACHE_LINE_SIZE) Logger logger(thid, notifier);
   notifier.add_logger(&logger);
   *logp = &logger;
   logger.worker();
-  // ending
-  notifier.logger_end(&logger);
-  logger.logger_end();
 }
 
 void set_cpu(std::thread &th, int cpu) {

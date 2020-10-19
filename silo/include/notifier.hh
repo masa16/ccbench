@@ -1,4 +1,5 @@
 #pragma once
+#include <utility>
 #include <vector>
 #include <unordered_set>
 #include <thread>
@@ -10,10 +11,11 @@ class NotificationId {
 public:
   uint64_t id_;
   uint64_t thread_id_;
-  uint64_t clock_;
+  uint64_t tx_start_;
+  uint64_t tx_end_ = 0;
 
-  NotificationId(uint64_t id, uint64_t thread_id, uint64_t clock) :
-    id_(id), thread_id_(thread_id), clock_(clock) {}
+  NotificationId(uint64_t id, uint64_t thread_id, uint64_t tx_start) :
+    id_(id), thread_id_(thread_id), tx_start_(tx_start) {}
 
   NotificationId() {NotificationId(0,0,0);}
 };
@@ -37,9 +39,11 @@ private:
   std::size_t byte_count_ = 0;
   std::uint64_t wait_latency_ = 0;
   std::uint64_t write_latency_ = 0;
-  std::uint64_t write_start_=~(uint64_t)0;
-  std::uint64_t write_end_=0;
+  std::uint64_t write_start_ = ~(uint64_t)0;
+  std::uint64_t write_end_ = 0;
   double throughput_ = 0;
+  std::uint64_t start_clock_;
+  std::vector<std::array<std::uint64_t,5>> latency_log_;
   bool quit_ = false;
   bool joined_ = false;
   std::unordered_set<Logger*> logger_set_;
@@ -47,6 +51,8 @@ private:
 public:
   Notifier() {
     buffer_.reserve(65536);
+    latency_log_.reserve(65536);
+    start_clock_ = rdtscp();
   }
   void add_logger(Logger *logger);
   void make_durable(std::vector<NotificationId> &nid_buffer, bool quit);

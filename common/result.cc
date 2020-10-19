@@ -305,6 +305,14 @@ void Result::displayWriteLatencyRate(size_t clocks_per_us, size_t extime,
   }
 }
 #endif
+#if DURABLE_EPOCH
+void Result::displayBackPressureLatency(size_t clocks_per_us, size_t thread_num) {
+  if (total_back_pressure_latency_) {
+    double t = total_back_pressure_latency_ / (clocks_per_us * 1e6) / thread_num;
+    cout << fixed << setprecision(4) << "back_pressure_latency:\t" << t << endl;
+  }
+}
+#endif
 
 void Result::addLocalAbortCounts(const uint64_t count) {
   total_abort_counts_ += count;
@@ -423,6 +431,11 @@ void Result::addLocalWriteLatency(const uint64_t count) {
   total_write_latency_ += count;
 }
 #endif
+#if DURABLE_EPOCH
+void Result::addLocalBackPressureLatency(const uint64_t count) {
+  total_back_pressure_latency_ += count;
+}
+#endif
 
 void Result::displayAllResult([[maybe_unused]] size_t clocks_per_us,
                               size_t extime,
@@ -457,6 +470,9 @@ void Result::displayAllResult([[maybe_unused]] size_t clocks_per_us,
   displayValidationFailureByWritelockRate();
   displayVersionMalloc();
   displayVersionReuse();
+#endif
+#if DURABLE_EPOCH
+  displayBackPressureLatency(clocks_per_us, thread_num);
 #endif
   displayAbortCounts();
   displayCommitCounts();
@@ -500,5 +516,8 @@ void Result::addLocalAllResult(const Result &other) {
       other.local_validation_failure_by_writelock_);
   addLocalVersionMalloc(other.local_version_malloc_);
   addLocalVersionReuse(other.local_version_reuse_);
+#endif
+#if DURABLE_EPOCH
+  addLocalBackPressureLatency(other.local_back_pressure_latency_);
 #endif
 }

@@ -1,3 +1,5 @@
+#include <iostream>
+#include <fstream>
 #include "include/notifier.hh"
 #include "include/logger.hh"
 
@@ -7,7 +9,7 @@ void Notifier::add_logger(Logger *logger) {
 }
 
 void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) {
-// calculate min(d_l)
+  // calculate min(d_l)
   uint64_t min_dl = __atomic_load_n(&(ThLocalDurableEpoch[0].obj_), __ATOMIC_ACQUIRE);
   for (unsigned int i=1; i < FLAGS_logger_num; ++i) {
     uint64_t dl = __atomic_load_n(&(ThLocalDurableEpoch[i].obj_), __ATOMIC_ACQUIRE);
@@ -22,20 +24,28 @@ void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) 
     __atomic_store_n(&(DurableEpoch.obj_), min_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
     uint64_t latency = 0;
+    uint64_t t = rdtscp();
+    uint64_t min_latency = ~(uint64_t)0;
+    uint64_t max_latency = 0;
     for (auto &nid : nid_buffer) {
       // notify client here
-      latency += rdtscp() - nid.clock_;
+      auto dt = t - nid.tx_start_;
+      latency += dt;
+      if (dt < min_latency) min_latency = dt;
+      if (dt > max_latency) max_latency = dt;
     }
+    auto n = nid_buffer.size();
 #if NOTIFIER_THREAD
     latency_ += latency;
-    count_ += nid_buffer.size();
+    count_ += n;
     cv_enq_.notify_one();
 #else
     asm volatile("":: : "memory");
     __atomic_fetch_add(&latency_, latency, __ATOMIC_ACQ_REL);
-    __atomic_fetch_add(&count_, nid_buffer.size(), __ATOMIC_ACQ_REL);
+    __atomic_fetch_add(&count_, n, __ATOMIC_ACQ_REL);
     asm volatile("":: : "memory");
 #endif
+    latency_log_.emplace_back(std::array<std::uint64_t,5>{t-start_clock_,n,latency/n,min_latency,max_latency});
     nid_buffer.clear();
   }
 }
@@ -121,4 +131,10 @@ void Notifier::display() {
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
   std::cout << "durable_epoch:\t" << d << endl;
   //std::cout << "buffer_.size():\t\t" << buffer_.size() << endl;
+  std::ofstream o("latency.dat");
+  o << "time,n,mean_latency,min_latency,max_latency" << std::endl;
+  for (auto x : latency_log_) {
+    o << x[0]/cps << "," << x[1] << "," << x[2]/cps << "," << x[3]/cps<< "," << x[4]/cps <<std::endl;
+  }
+  o.close();
 }

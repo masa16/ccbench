@@ -40,6 +40,9 @@ public:
   uint64_t local_version_reuse_ = 0;
   uint64_t local_write_latency_ = 0;
 #endif
+#if DURABLE_EPOCH
+  uint64_t local_back_pressure_latency_ = 0;
+#endif
 
   uint64_t total_abort_counts_ = 0;
   uint64_t total_commit_counts_ = 0;
@@ -74,6 +77,9 @@ public:
   uint64_t total_write_latency_ = 0;
   // not exist local version.
   uint64_t total_latency_ = 0;
+#endif
+#if DURABLE_EPOCH
+  uint64_t total_back_pressure_latency_ = 0;
 #endif
 
   void displayAbortCounts();
@@ -123,8 +129,11 @@ public:
   void displayValidationFailureByTidRate();
   void displayValidationFailureByWritelockRate();
   void displayVersionMalloc();
-  void displayVersionReuse();
+  void displayVersionReuse(size_t clocks_per_us);
 
+#endif
+#if DURABLE_EPOCH
+  void displayBackPressureLatency(size_t clocks_per_us, size_t thread_num);
 #endif
 
   void addLocalAllResult(const Result &other);
@@ -162,5 +171,8 @@ public:
   void addLocalValidationFailureByWritelock(const uint64_t count);
   void addLocalVersionMalloc(const uint64_t count);
   void addLocalVersionReuse(const uint64_t count);
+#endif
+#if DURABLE_EPOCH
+  void addLocalBackPressureLatency(const uint64_t count);
 #endif
 };
