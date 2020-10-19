@@ -51,7 +51,8 @@ void LogBufferPool::terminate() {
   }
 }
 
-size_t LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer) {
+void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer,
+                      size_t &nid_count, size_t &byte_count) {
   // prepare header
   LogHeader log_header;
   for (auto log : log_set_)
@@ -59,16 +60,18 @@ size_t LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer) 
   log_header.logRecNum_ = log_set_.size();
   log_header.convertChkSumIntoComplementOnTwo();
   // write to file
-  logfile.write((void*)&log_header, sizeof(LogHeader));
-  logfile.write((void*)&(log_set_[0]), sizeof(LogRecord)*log_header.logRecNum_);
+  size_t header_size = sizeof(LogHeader);
+  size_t record_size = sizeof(LogRecord) * log_header.logRecNum_;
+  byte_count += header_size + record_size;
+  logfile.write((void*)&log_header, header_size);
+  logfile.write((void*)&(log_set_[0]), record_size);
   // clear for next transactions.
   log_set_.clear();
   // copy NotificationID
   for (auto nid : nid_set_) nid_buffer.emplace_back(nid);
-  size_t nid_set_size = nid_set_.size();
+  nid_count += nid_set_.size();
   nid_set_.clear();
   pool_.return_buffer(this);
-  return nid_set_size;
 }
 
 bool LogBuffer::empty() {

@@ -78,14 +78,18 @@ void Logger::logging(bool quit) {
   if (tid.epoch == 0 || min_ctid == ~(uint64_t)0) return;
 
   // write log
+  std::uint64_t t = rdtscp();
+  if (write_start_==0) write_start_ = t;
   while(!queue_.empty()) {
     auto sz = queue_.size();
     if (max_buffers_ < sz) max_buffers_ = sz;
     auto log_buffer = queue_.deq();
-    counter_ += log_buffer->write(logfile_, nid_buffer_);
+    log_buffer->write(logfile_, nid_buffer_, nid_count_, byte_count_);
   }
   logfile_.fsync();
   //usleep(1000000); // increase latency
+  write_end_ = rdtscp();
+  write_latency_ += write_end_ - t;
 
   // publish Durable Epoch of this thread
   auto new_dl = tid.epoch - 1;
@@ -113,7 +117,12 @@ void Logger::worker() {
   logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   logfile_.ftruncate(10 ^ 9);
 
-  while(queue_.wait_deq()) logging(false);
+  for (;;) {
+    std::uint64_t t = rdtscp();
+    if (!queue_.wait_deq()) break;
+    wait_latency_ += rdtscp() - t;
+    logging(false);
+  }
   logging(true);
   show_result();
 }
@@ -131,7 +140,7 @@ void Logger::rotate_logfile(uint64_t epoch) {
   logfile_.ftruncate(10 ^ 9);
 }
 
-void Logger::finish_txn(int thid) {
+void Logger::worker_end(int thid) {
   std::unique_lock<std::mutex> lock(mutex_);
   thid_set_.erase(thid);
   if (thid_set_.empty()) {
@@ -140,14 +149,24 @@ void Logger::finish_txn(int thid) {
   cv_finish_.wait(lock, [this]{return joined_;});
 }
 
-void Logger::thread_end() {
+void Logger::logger_end() {
   std::lock_guard<std::mutex> lock(mutex_);
   joined_ = true;
   cv_finish_.notify_all();
 }
 
 void Logger::show_result() {
-  cout << "Logger#"<<thid_<<":\tmax_buffers:\t" << max_buffers_ << endl;
+  double cps = FLAGS_clocks_per_us*1e6;
+  static std::mutex mtx;
+  std::lock_guard<std::mutex> lock(mtx);
+  cout << "Logger#"<<thid_
+       <<": max_buffers=" << max_buffers_
+       <<" nid_count=" << nid_count_
+       <<" byte_count[B]=" << byte_count_
+       <<" write_latency[s]=" << write_latency_/cps
+       <<" throughput[B/s]=" << byte_count_/(write_latency_/cps)
+       <<" wait_latency[s]=" << wait_latency_/cps
+       << endl;
 #if 0
   for(auto itr : log_buffer_map_)
     cout<<itr.first

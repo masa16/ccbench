@@ -18,6 +18,8 @@ public:
   NotificationId() {NotificationId(0,0,0);}
 };
 
+class Logger;
+
 class Notifier {
 private:
   std::thread thread_;
@@ -30,19 +32,28 @@ private:
   std::size_t count_ = 0;
   std::size_t latency_ = 0;
   std::size_t push_size_ = 0;
+  std::size_t max_buffers_ = 0;
+  std::size_t nid_count_ = 0;
+  std::size_t byte_count_ = 0;
+  std::uint64_t wait_latency_ = 0;
+  std::uint64_t write_latency_ = 0;
+  std::uint64_t write_start_=~(uint64_t)0;
+  std::uint64_t write_end_=0;
+  double throughput_ = 0;
   bool quit_ = false;
   bool joined_ = false;
-  std::unordered_set<int> thid_set_;
+  std::unordered_set<Logger*> logger_set_;
 
 public:
   Notifier() {
     buffer_.reserve(65536);
   }
+  void add_logger(Logger *logger);
   void make_durable(std::vector<NotificationId> &nid_buffer, bool quit);
   void worker();
-  void run(int thread_num);
+  void run();
   void push(std::vector<NotificationId> &nid_buffer, bool quit);
   void join();
-  void finish_log(int thid);
+  void logger_end(Logger *logger);
   void display();
 };

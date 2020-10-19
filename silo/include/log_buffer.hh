@@ -26,7 +26,8 @@ public:
   void push(std::uint64_t tid, NotificationId nid,
             std::vector<WriteElement<Tuple>> &write_set,
             char *val, bool new_epoch_begins);
-  size_t write(File &logfile, std::vector<NotificationId> &nid_buffer);
+  void write(File &logfile, std::vector<NotificationId> &nid_buffer,
+             size_t &nid_count, size_t &byte_count);
   bool empty();
 
   LogBuffer(LogBufferPool &pool) : pool_(pool) {

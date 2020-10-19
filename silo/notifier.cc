@@ -1,4 +1,10 @@
 #include "include/notifier.hh"
+#include "include/logger.hh"
+
+void Notifier::add_logger(Logger *logger) {
+  std::unique_lock<std::mutex> lock(mutex_);
+  logger_set_.emplace(logger);
+}
 
 void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) {
 // calculate min(d_l)
@@ -44,10 +50,8 @@ void Notifier::worker() {
 }
 #endif
 
-void Notifier::run(int logger_num) {
+void Notifier::run() {
 #if NOTIFIER_THREAD
-  for (int i=0; i<logger_num; i++)
-    thid_set_.emplace(i);
   thread_ = std::thread([this]{worker();});
 #endif
 }
@@ -79,11 +83,19 @@ void Notifier::join() {
 #endif
 }
 
-void Notifier::finish_log(int thid) {
-#if NOTIFIER_THREAD
+void Notifier::logger_end(Logger *logger) {
   std::unique_lock<std::mutex> lock(mutex_);
-  thid_set_.erase(thid);
-  if (thid_set_.empty()) {
+  max_buffers_ += logger->max_buffers_;
+  nid_count_ += logger->nid_count_;
+  byte_count_ += logger->byte_count_;
+  write_latency_ += logger->write_latency_;
+  wait_latency_ += logger->wait_latency_;
+  throughput_ += (double)logger->byte_count_/logger->write_latency_;
+  if (write_start_ > logger->write_start_) write_start_ = logger->write_start_;
+  if (write_end_ < logger->write_end_) write_end_ = logger->write_end_;
+  logger_set_.erase(logger);
+#if NOTIFIER_THREAD
+  if (logger_set_.empty()) {
     quit_ = true;
     cv_deq_.notify_all();
   }
@@ -92,6 +104,16 @@ void Notifier::finish_log(int thid) {
 }
 
 void Notifier::display() {
+  double cps = FLAGS_clocks_per_us*1e6;
+  size_t n = FLAGS_logger_num;
+  std::cout<<"mean_max_buffers:\t" << max_buffers_/n << endl;
+  std::cout<<"nid_count:\t" << nid_count_<< endl;
+  std::cout<<"wait_time[s]:\t" << wait_latency_/cps << endl;
+  std::cout<<"write_time[s]:\t" << write_latency_/cps << endl;
+  std::cout<<"byte_count[B]:\t" << byte_count_<< endl;
+  std::cout<<"throughput(thread_sum)[B/s]:\t" << throughput_*cps << endl;
+  std::cout<<"throughput(byte_sum)[B/s]:\t" << cps*byte_count_/write_latency_*n << endl;
+  std::cout<<"throughput(elap)[B/s]:\t" << cps*byte_count_/(write_end_-write_start_) << endl;
   double t = (double)latency_ / FLAGS_clocks_per_us / count_ / 1000;
   std::cout << std::fixed << std::setprecision(4)
             << "durable_latency[ms]:\t" << t << endl;

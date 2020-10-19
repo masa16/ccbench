@@ -87,19 +87,24 @@ public:
   std::vector<int> thid_vec_;
   std::unordered_set<int> thid_set_;
   LogQueue queue_;
-  size_t max_buffers_ = 0;
   File logfile_;
   std::string logdir_;
   std::string logpath_;
   std::uint64_t rotate_epoch_ = 0;
   Notifier &notifier_;
   std::unordered_map<int, LogBufferPool*> log_buffer_pool_map_;
+  std::size_t max_buffers_ = 0;
+  std::size_t nid_count_ = 0;
+  std::size_t byte_count_ = 0;
+  std::uint64_t wait_latency_ = 0;
+  std::uint64_t write_latency_ = 0;
+  std::uint64_t write_start_ = 0;
+  std::uint64_t write_end_ = 0;
 
   Logger(int i, Notifier &n) : thid_(i), notifier_(n) {}
-  //~Logger() {for(auto itr : log_buffer_map_) delete itr.second;}
 
   void add_txn_executor(TxnExecutor &trans);
   void worker();
-  void finish_txn(int thid);
-  void thread_end();
+  void worker_end(int thid);
+  void logger_end();
 };

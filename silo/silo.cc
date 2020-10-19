@@ -155,7 +155,7 @@ RETRY:
 
 #if DURABLE_EPOCH
   trans.log_buffer_pool_.terminate(); // swith buffer
-  logger->finish_txn(thid);
+  logger->worker_end(thid);
 #endif
   return;
 }
@@ -167,19 +167,19 @@ void logger_th(int thid, Notifier &notifier, Logger** logp){
     std::cout << "Logger #" << thid << ": on CPU " << sched_getcpu() << "\n";
   }
   alignas(CACHE_LINE_SIZE) Logger logger(thid, notifier);
+  notifier.add_logger(&logger);
   *logp = &logger;
   logger.worker();
   // ending
-  notifier.finish_log(thid);
-  logger.thread_end();
+  notifier.logger_end(&logger);
+  logger.logger_end();
 }
 
 void set_cpu(std::thread &th, int cpu) {
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
   CPU_SET(cpu, &cpuset);
-  int rc = pthread_setaffinity_np(th.native_handle(),
-                                  sizeof(cpu_set_t), &cpuset);
+  int rc = pthread_setaffinity_np(th.native_handle(), sizeof(cpu_set_t), &cpuset);
   if (rc != 0) {
     std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
   }
@@ -231,7 +231,7 @@ int main(int argc, char *argv[]) try {
       }
     }
   }
-  notifier.run(FLAGS_logger_num);
+  notifier.run();
 #else
   for (size_t i = 0; i < FLAGS_thread_num; ++i)
     thv.emplace_back(worker, i, std::ref(readys[i]), std::ref(start),
