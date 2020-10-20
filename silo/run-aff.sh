@@ -8,29 +8,23 @@ affinity_list='
 112:0,1,2,3,7,8,9,14,15,16,17,21,22,23,4,5,6,10,11,12,13+140:28,29,30,31,35,36,37,42,43,44,45,49,50,51,32,33,34,38,39,40,41
 112:0,1,2,3,7,8,9,14,15,16,17,21,22,23,4,5,6,10,11,12,13,18,19,20,24,25,26,27+140:28,29,30,31,35,36,37,42,43,44,45,49,50,51,32,33,34,38,39,40,41,46,47,48,52,53,54,55
 '
-
 repeat=1
-cmd='./silo.exe -extime 12 -clocks_per_us 2095 -buffer_num 4'
+cmd='./silo.exe -extime 1 -clocks_per_us 2095 -buffer_num 4'
 
-d=`basename ${0%.sh}`
-mkdir -p $d
+b=`basename ${0%.sh}`
 
-i=0
 for a in $affinity_list; do
-  echo $((++i));
   for j in $(seq $repeat); do
     sleep 0
     c="numactl --localalloc $cmd -affinity $a"
     echo $c
-    $c | tee -a $d/test$i.log
+    $c | tee -a $b.log
   done
 done
 
-i=0
 echo "thread_num,logger_num,throughput[tps],abort_rate,durabule_latency,log_throughput[B/s],backpressure_latency_rate,write_latency_rate" | tee $d.csv
-for a in $affinity_list; do
- echo $((++i))
- awk '
+
+awk '
   /#FLAGS_thread_num:/ {i=$2}
   /#FLAGS_logger_num:/ {l=$2}
   /^abort_rate:/ {a=$2}
@@ -40,5 +34,4 @@ for a in $affinity_list; do
   /^wait_time\[s\]:/ {x=$2}
   /^write_time\[s\]:/ {w=$2}
   /^throughput\[tps\]:/ {printf("%s,%s,%s,%s,%s,%s,%s,%f\n",i,l,$2,a,d,t,b,w/(x+w));i=l=a=d=t=b=x=w=""}
- ' $d/test$i.log | tee -a $d.csv
-done
+' $b.log | tee -a $b.csv
