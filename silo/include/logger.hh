@@ -90,7 +90,7 @@ public:
   File logfile_;
   std::string logdir_;
   std::string logpath_;
-  std::uint64_t rotate_epoch_ = 0;
+  std::uint64_t rotate_epoch_ = 100;
   Notifier &notifier_;
   std::unordered_map<int, LogBufferPool*> log_buffer_pool_map_;
   std::size_t max_buffers_ = 0;

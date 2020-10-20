@@ -6,11 +6,10 @@
 #include "tuple.hh"
 #include "silo_op_element.hh"
 #include "log.hh"
+#include "common.hh"
 
 #define LOG_BUFFER_SIZE (512000/sizeof(LogRecord))
 #define NID_BUFFER_SIZE (51200/sizeof(LogRecord))
-//#define BUFFER_NUM (268435456/LOG_BUFFER_SIZE/20)
-#define BUFFER_NUM 2
 
 class LogQueue;
 class NotificationId;
@@ -45,16 +44,17 @@ public:
   std::vector<LogBuffer*> pool_;
   LogBuffer *current_buffer_;
   bool quit_ = false;
-  std::uint64_t back_pressure_ = 0;
+  std::uint64_t txn_latency_ = 0;
+  std::uint64_t bkpr_latency_ = 0;
 
   LogBufferPool() {
-    buffer_.reserve(BUFFER_NUM);
-    for (int i=0; i<BUFFER_NUM; i++) {
+    buffer_.reserve(FLAGS_buffer_num);
+    for (int i=0; i<FLAGS_buffer_num; i++) {
       buffer_.emplace_back(*this);
     }
-    pool_.reserve(BUFFER_NUM);
+    pool_.reserve(FLAGS_buffer_num);
     current_buffer_ = &buffer_[0];
-    for (int i=1; i<BUFFER_NUM; i++) {
+    for (int i=1; i<FLAGS_buffer_num; i++) {
       pool_.push_back(&buffer_[i]);
     }
   }

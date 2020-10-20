@@ -1,3 +1,4 @@
+#if DURABLE_EPOCH
 #include <iostream>
 #include <fstream>
 #include "include/notifier.hh"
@@ -138,3 +139,4 @@ void Notifier::display() {
   }
   o.close();
 }
+#endif

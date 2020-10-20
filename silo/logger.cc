@@ -1,3 +1,4 @@
+#if DURABLE_EPOCH
 #include "include/logger.hh"
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -65,8 +66,9 @@ void Logger::add_txn_executor(TxnExecutor &trans) {
 
 void Logger::logging(bool quit) {
   size_t q_size = queue_.size();
+  if (q_size == 0) return;
   if (max_buffers_ < q_size) max_buffers_ = q_size;
-  if (q_size > FLAGS_thread_num) q_size = FLAGS_thread_num;
+  if (q_size > thid_vec_.size()) q_size = thid_vec_.size();
   // calculate min(ctid_w)
   uint64_t min_ctid = ~(uint64_t)0;
   for (auto itr : thid_vec_) {
@@ -102,8 +104,7 @@ void Logger::logging(bool quit) {
     // rotate logfile
     if (new_dl >= rotate_epoch_)
       rotate_logfile(new_dl);
-    if (!nid_buffer_.empty())
-      notifier_.push(nid_buffer_, quit);
+    notifier_.push(nid_buffer_, quit);
   }
 }
 
@@ -182,3 +183,4 @@ void Logger::show_result() {
   cout<<"counter="<<counter_<<endl;
 #endif
 }
+#endif

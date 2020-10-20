@@ -306,10 +306,10 @@ void Result::displayWriteLatencyRate(size_t clocks_per_us, size_t extime,
 }
 #endif
 #if DURABLE_EPOCH
-void Result::displayBackPressureLatency(size_t clocks_per_us, size_t thread_num) {
-  if (total_back_pressure_latency_) {
-    double t = total_back_pressure_latency_ / (clocks_per_us * 1e6) / thread_num;
-    cout << fixed << setprecision(4) << "back_pressure_latency:\t" << t << endl;
+void Result::displayBackPressureLatencyRate() {
+  if (total_bkpr_latency_) {
+    double r = (double)total_bkpr_latency_ / total_txn_latency_;
+    cout << fixed << setprecision(4) << "backpressure_latency_rate:\t" << r << endl;
   }
 }
 #endif
@@ -432,8 +432,11 @@ void Result::addLocalWriteLatency(const uint64_t count) {
 }
 #endif
 #if DURABLE_EPOCH
-void Result::addLocalBackPressureLatency(const uint64_t count) {
-  total_back_pressure_latency_ += count;
+void Result::addLocalBkprLatency(const uint64_t count) {
+  total_bkpr_latency_ += count;
+}
+void Result::addLocalTxnLatency(const uint64_t count) {
+  total_txn_latency_ += count;
 }
 #endif
 
@@ -472,7 +475,7 @@ void Result::displayAllResult([[maybe_unused]] size_t clocks_per_us,
   displayVersionReuse();
 #endif
 #if DURABLE_EPOCH
-  displayBackPressureLatency(clocks_per_us, thread_num);
+  displayBackPressureLatencyRate();
 #endif
   displayAbortCounts();
   displayCommitCounts();
@@ -518,6 +521,7 @@ void Result::addLocalAllResult(const Result &other) {
   addLocalVersionReuse(other.local_version_reuse_);
 #endif
 #if DURABLE_EPOCH
-  addLocalBackPressureLatency(other.local_back_pressure_latency_);
+  addLocalTxnLatency(other.local_txn_latency_);
+  addLocalBkprLatency(other.local_bkpr_latency_);
 #endif
 }

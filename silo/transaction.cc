@@ -49,7 +49,9 @@ void TxnExecutor::begin() {
   status_ = TransactionStatus::kInFlight;
   max_wset_.obj_ = 0;
   max_rset_.obj_ = 0;
+#if DURABLE_EPOCH
   nid_ = NotificationId(nid_counter_++, thid_, rdtscp());
+#endif
 }
 
 void TxnExecutor::displayWriteSet() {
@@ -439,7 +441,7 @@ void TxnExecutor::writePhase() {
   maxtid.latest = 1;
   mrctid_ = maxtid;
 
-#if WAL
+#if WAL || DURABLE_EPOCH
   wal(maxtid.obj_);
 #endif
 

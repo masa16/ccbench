@@ -20,7 +20,9 @@
 #include "include/transaction.hh"
 #include "include/util.hh"
 #include "include/logger.hh"
+#if DURABLE_EPOCH
 #include "include/notifier.hh"
+#endif
 
 #include "../include/atomic_wrapper.hh"
 #include "../include/backoff.hh"
@@ -61,7 +63,6 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 #endif
 
 #if WAL
-#if !DURABLE_EPOCH
   /*
   const boost::filesystem::path log_dir_path("/tmp/ccbench");
   if (boost::filesystem::exists(log_dir_path)) {
@@ -77,7 +78,6 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit)
   genLogFile(logpath, thid);
   trans.logfile_.open(logpath, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   trans.logfile_.ftruncate(10 ^ 9);
-#endif
 #endif
 
 #ifdef Linux

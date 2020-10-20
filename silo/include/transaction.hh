@@ -14,8 +14,10 @@
 #include "log.hh"
 #include "silo_op_element.hh"
 #include "tuple.hh"
+#if DURABLE_EPOCH
 #include "log_buffer.hh"
 #include "notifier.hh"
+#endif
 
 #define LOGSET_SIZE 1000
 
@@ -41,8 +43,6 @@ public:
    */
   Result *sres_;
 
-  LogBufferPool log_buffer_pool_;
-
   File logfile_;
 
   Tidword mrctid_;
@@ -54,8 +54,11 @@ public:
 
   bool new_epoch_begins_;
 
+#if DURABLE_EPOCH
+  LogBufferPool log_buffer_pool_;
   NotificationId nid_;
   std::uint64_t nid_counter_ = 0; // Notification ID
+#endif
 
   TxnExecutor(int thid, Result *sres);
 
