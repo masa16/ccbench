@@ -9,7 +9,7 @@ affinity_list='
 112:0,1,2,3,7,8,9,14,15,16,17,21,22,23,4,5,6,10,11,12,13,18,19,20,24,25,26,27+140:28,29,30,31,35,36,37,42,43,44,45,49,50,51,32,33,34,38,39,40,41,46,47,48,52,53,54,55
 '
 repeat=1
-cmd='./silo.exe -extime 1 -clocks_per_us 2095 -buffer_num 4'
+cmd='./silo.exe -extime 12 -clocks_per_us 2095 -buffer_num 4'
 
 b=`basename ${0%.sh}`
 
