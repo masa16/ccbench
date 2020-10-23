@@ -83,6 +83,7 @@ void Logger::logging(bool quit) {
   if (tid.epoch == 0 || min_ctid == ~(uint64_t)0) return;
 
   // write log
+  size_t byte_size = 0;
   std::uint64_t t = rdtscp();
   if (write_start_==0) write_start_ = t;
   for (size_t i=0; i<q_size; ++i) {
@@ -93,6 +94,8 @@ void Logger::logging(bool quit) {
   //usleep(1000000); // increase latency
   write_end_ = rdtscp();
   write_latency_ += write_end_ - t;
+  write_count_++;
+  buffer_count_ += q_size;
 
   // publish Durable Epoch of this thread
   auto new_dl = tid.epoch - 1;

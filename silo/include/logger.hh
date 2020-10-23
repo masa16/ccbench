@@ -96,6 +96,8 @@ public:
   std::size_t max_buffers_ = 0;
   std::size_t nid_count_ = 0;
   std::size_t byte_count_ = 0;
+  std::size_t write_count_ = 0;
+  std::size_t buffer_count_ = 0;
   std::uint64_t wait_latency_ = 0;
   std::uint64_t write_latency_ = 0;
   std::uint64_t write_start_ = 0;

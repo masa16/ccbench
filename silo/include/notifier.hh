@@ -20,6 +20,18 @@ public:
   NotificationId() {NotificationId(0,0,0);}
 };
 
+class PepochFile {
+private:
+  std::string file_name_ = "pepoch";
+  std::uint64_t *addr_;
+  int fd_ = -1;
+public:
+  void open();
+  void write(std::uint64_t epoch);
+  void close();
+  ~PepochFile() { if (fd_ != -1) close(); }
+};
+
 class Logger;
 
 class Notifier {
@@ -37,22 +49,27 @@ private:
   std::size_t max_buffers_ = 0;
   std::size_t nid_count_ = 0;
   std::size_t byte_count_ = 0;
+  std::size_t write_count_ = 0;
+  std::size_t buffer_count_ = 0;
   std::uint64_t wait_latency_ = 0;
   std::uint64_t write_latency_ = 0;
   std::uint64_t write_start_ = ~(uint64_t)0;
   std::uint64_t write_end_ = 0;
   double throughput_ = 0;
   std::uint64_t start_clock_;
-  std::vector<std::array<std::uint64_t,5>> latency_log_;
+  std::vector<std::array<std::uint64_t,6>> latency_log_;
   bool quit_ = false;
   bool joined_ = false;
   std::unordered_set<Logger*> logger_set_;
 
 public:
+  PepochFile pepoch_file_;
+
   Notifier() {
     buffer_.reserve(65536);
     latency_log_.reserve(65536);
     start_clock_ = rdtscp();
+    pepoch_file_.open();
   }
   void add_logger(Logger *logger);
   void make_durable(std::vector<NotificationId> &nid_buffer, bool quit);
