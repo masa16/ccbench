@@ -12,19 +12,23 @@ repeat=1
 cmd='./silo.exe -extime 12 -clocks_per_us 2095 -buffer_num 4'
 
 b=`basename ${0%.sh}`
-
+i=0
 for a in $affinity_list; do
+  echo $((++i))
   for j in $(seq $repeat); do
     sleep 0
     c="numactl --localalloc $cmd -affinity $a"
     echo $c
     $c | tee -a $b.log
+    mv latency.dat latency$i-$j.dat
   done
 done
 
-echo "thread_num,logger_num,throughput[tps],abort_rate,durabule_latency,log_throughput[B/s],backpressure_latency_rate,write_latency_rate" | tee $d.csv
+log2csv() {
+  local b=$1
+  echo "thread_num,logger_num,throughput[tps],abort_rate,durabule_latency,log_throughput[B/s],backpressure_latency_rate,write_latency_rate,write_count,buffer_count,byte_count" | tee $b.csv
 
-awk '
+  awk '
   /#FLAGS_thread_num:/ {i=$2}
   /#FLAGS_logger_num:/ {l=$2}
   /^abort_rate:/ {a=$2}
@@ -33,5 +37,11 @@ awk '
   /^backpressure_latency_rate:/ {b=$2}
   /^wait_time\[s\]:/ {x=$2}
   /^write_time\[s\]:/ {w=$2}
-  /^throughput\[tps\]:/ {printf("%s,%s,%s,%s,%s,%s,%s,%f\n",i,l,$2,a,d,t,b,w/(x+w));i=l=a=d=t=b=x=w=""}
+  /^write_count:/ {n=$2}
+  /^buffer_count:/ {f=$2}
+  /^byte_count\[B\]:/ {s=$2}
+  /^throughput\[tps\]:/ {printf("%s,%s,%s,%s,%s,%s,%s,%f,%s,%s,%s\n",i,l,$2,a,d,t,b,w/(x+w),n,f,s);i=l=a=d=t=b=x=w=n=f=s=""}
 ' $b.log | tee -a $b.csv
+}
+
+log2csv $b
