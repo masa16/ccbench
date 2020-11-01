@@ -14,7 +14,11 @@ void PepochFile::open() {
     ERR;
   }
   std::uint64_t zero=0;
-  ::write(fd_, &zero, sizeof(std::uint64_t));
+  auto sz = ::write(fd_, &zero, sizeof(std::uint64_t));
+  if (sz == -1) {
+    std::cerr << "write failed";
+    ERR;
+  }
   addr_ = (std::uint64_t*)::mmap(NULL, sizeof(std::uint64_t), PROT_WRITE, MAP_SHARED, fd_, 0);
   if (addr_ == MAP_FAILED) {
     std::cerr << "mmap failed";
