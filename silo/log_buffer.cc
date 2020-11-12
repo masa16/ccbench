@@ -18,6 +18,12 @@ void LogBuffer::push(std::uint64_t tid, NotificationId nid,
     log_set_.emplace_back(tid, itr.key_, val);
   }
   nid_set_.emplace_back(nid);
+  // epoch
+  Tidword tidw;
+  tidw.obj_ = tid;
+  std::uint64_t epoch = tidw.epoch;
+  if (epoch < min_epoch_) min_epoch_ = epoch;
+  if (epoch > max_epoch_) max_epoch_ = epoch;
   // buffer full or new epoch begins
   if (log_set_.size() == LOG_BUFFER_SIZE ||
       nid_set_.size() == NID_BUFFER_SIZE || new_epoch_begins) {
@@ -85,6 +91,9 @@ void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer,
   for (auto &nid : nid_set_) nid_buffer.emplace_back(nid);
   nid_count += nid_set_.size();
   nid_set_.clear();
+  // init epoch
+  min_epoch_ = ~(uint64_t)0;
+  max_epoch_ = 0;
   pool_.return_buffer(this);
 }
 

@@ -82,13 +82,17 @@ void Logger::logging(bool quit) {
   Tidword tid;
   tid.obj_ = min_ctid;
   if (tid.epoch == 0 || min_ctid == ~(uint64_t)0) return;
+  // min_epoch
+  std::uint64_t min_epoch = queue_.min_epoch();
+  if (min_epoch > tid.epoch) min_epoch = tid.epoch;
 
   // write log
-  size_t byte_size = 0;
+  std::uint64_t max_epoch = 0;
   std::uint64_t t = rdtscp();
   if (write_start_==0) write_start_ = t;
   for (size_t i=0; i<q_size; ++i) {
     auto log_buffer = queue_.deq();
+    if (log_buffer->max_epoch_ > max_epoch) max_epoch = log_buffer->max_epoch_;
     log_buffer->write(logfile_, nid_buffer_, nid_count_, byte_count_);
   }
 #ifdef Linux
@@ -103,15 +107,15 @@ void Logger::logging(bool quit) {
   buffer_count_ += q_size;
 
   // publish Durable Epoch of this thread
-  auto new_dl = tid.epoch - 1;
+  auto new_dl = min_epoch - 1;
   auto old_dl = __atomic_load_n(&(ThLocalDurableEpoch[thid_].obj_), __ATOMIC_ACQUIRE);
   if (new_dl != old_dl || quit) {
     asm volatile("":: : "memory");
     __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
     // rotate logfile
-    if (new_dl >= rotate_epoch_)
-      rotate_logfile(new_dl);
+    if (max_epoch >= rotate_epoch_)
+      rotate_logfile(max_epoch);
     notifier_.push(nid_buffer_, quit);
   }
 }

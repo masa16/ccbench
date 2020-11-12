@@ -1,7 +1,7 @@
 #pragma once
 #include <mutex>
 #include <condition_variable>
-#include <queue>
+#include <deque>
 #include <atomic>
 
 class LogBuffer;
@@ -12,7 +12,7 @@ private:
   std::mutex mutex_;
   std::condition_variable cv_enq_;
   std::condition_variable cv_deq_;
-  std::queue<LogBuffer*> queue_;
+  std::deque<LogBuffer*> queue_;
   std::size_t capacity_ = 1000;
   bool quit_ = false;
 
@@ -33,7 +33,7 @@ public:
 
   void enq(LogBuffer* x) {
     my_lock();
-    queue_.push(x);
+    queue_.emplace_back(x);
     cv_deq_.notify_one();
     my_unlock();
   }
@@ -47,7 +47,7 @@ public:
   LogBuffer *deq() {
     my_lock();
     auto ret = queue_.front();
-    queue_.pop();
+    queue_.pop_front();
     my_unlock();
     return ret;
   }
@@ -58,6 +58,15 @@ public:
 
   size_t size() {
     return queue_.size();
+  }
+
+  uint64_t min_epoch() {
+    uint64_t e = ~(uint64_t)0;
+    for (auto buf : queue_) {
+      if (e > buf->min_epoch_)
+        e = buf->min_epoch_;
+    }
+    return e;
   }
 
   void terminate() {
