@@ -1,4 +1,5 @@
 #if DURABLE_EPOCH
+//#define Linux 1
 #include "include/logger.hh"
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -90,7 +91,11 @@ void Logger::logging(bool quit) {
     auto log_buffer = queue_.deq();
     log_buffer->write(logfile_, nid_buffer_, nid_count_, byte_count_);
   }
+#ifdef Linux
+  logfile_.fdatasync();
+#else
   logfile_.fsync();
+#endif
   //usleep(1000000); // increase latency
   write_end_ = rdtscp();
   write_latency_ += write_end_ - t;
