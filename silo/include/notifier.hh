@@ -13,6 +13,7 @@ public:
   uint64_t thread_id_;
   uint64_t tx_start_;
   uint64_t tx_end_ = 0;
+  uint64_t tid_;
 
   NotificationId(uint64_t id, uint64_t thread_id, uint64_t tx_start) :
     id_(id), thread_id_(thread_id), tx_start_(tx_start) {}
@@ -42,6 +43,7 @@ private:
   std::condition_variable cv_deq_;
   std::condition_variable cv_finish_;
   std::vector<NotificationId> buffer_;
+  std::vector<NotificationId> tmp_buffer_;
   std::size_t capa_ = 100000000;
   std::size_t count_ = 0;
   std::size_t latency_ = 0;

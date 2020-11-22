@@ -63,14 +63,23 @@ void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) 
   uint64_t latency = 0;
   uint64_t min_latency = ~(uint64_t)0;
   uint64_t max_latency = 0;
+  size_t buffer_size = 0;
   for (auto &nid : nid_buffer) {
-    // notify client here
-    auto dt = t - nid.tx_start_;
-    latency += dt;
-    if (dt < min_latency) min_latency = dt;
-    if (dt > max_latency) max_latency = dt;
+    Tidword tidw;
+    tidw.obj_ = nid.tid_;
+    std::uint64_t epoch = tidw.epoch;
+    if (epoch <= min_dl) {
+      // notify client here
+      auto dt = t - nid.tx_start_;
+      latency += dt;
+      if (dt < min_latency) min_latency = dt;
+      if (dt > max_latency) max_latency = dt;
+      ++buffer_size;
+    } else {
+      // Not-Durable Tx
+      tmp_buffer_.emplace_back(nid);
+    }
   }
-  auto buffer_size = nid_buffer.size();
 #if NOTIFIER_THREAD
   latency_ += latency;
   count_ += buffer_size;
@@ -81,11 +90,18 @@ void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) 
   __atomic_fetch_add(&count_, buffer_size, __ATOMIC_ACQ_REL);
   asm volatile("":: : "memory");
 #endif
+  if (buffer_size > 0) {
   latency_log_.emplace_back(
     std::array<std::uint64_t,6>{
       min_dl, t-start_clock_, buffer_size, latency/buffer_size, min_latency, max_latency,
     });
+  }
   nid_buffer.clear();
+  // return Not-Durable Tx
+  for (auto &nid : tmp_buffer_) {
+    nid_buffer.emplace_back(nid);
+  }
+  tmp_buffer_.clear();
 }
 
 #if NOTIFIER_THREAD
@@ -119,7 +135,7 @@ void Notifier::push(std::vector<NotificationId> &nid_buffer, bool quit) {
 #else
 void Notifier::push(std::vector<NotificationId> &nid_buffer, bool quit) {
   std::unique_lock<std::mutex> lock(mutex_);
-  if (buffer_.size() + nid_buffer.size() > capa_) return;
+  //if (buffer_.size() + nid_buffer.size() > capa_) return;
   for (auto &nid : nid_buffer) buffer_.emplace_back(nid);
   nid_buffer.clear();
   make_durable(buffer_, quit);

@@ -24,7 +24,7 @@ private:
 public:
   uint64_t min_epoch_ = ~(uint64_t)0;
   uint64_t max_epoch_ = 0;
-  void push(std::uint64_t tid, NotificationId nid,
+  void push(std::uint64_t tid, NotificationId &nid,
             std::vector<WriteElement<Tuple>> &write_set,
             char *val, bool new_epoch_begins);
   void write(File &logfile, std::vector<NotificationId> &nid_buffer,

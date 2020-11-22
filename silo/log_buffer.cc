@@ -5,9 +5,10 @@
 
 // no lock required since each thread has unique LogBuffer
 
-void LogBuffer::push(std::uint64_t tid, NotificationId nid,
+void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
                      std::vector<WriteElement<Tuple>> &write_set,
                      char *val, bool new_epoch_begins) {
+  nid.tid_ = tid;
   nid.tx_end_ = rdtscp();
   // check buffer capa
   if (log_set_.size() + write_set.size() > LOG_BUFFER_SIZE) {
