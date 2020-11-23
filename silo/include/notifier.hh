@@ -43,7 +43,6 @@ private:
   std::condition_variable cv_deq_;
   std::condition_variable cv_finish_;
   std::vector<NotificationId> buffer_;
-  std::vector<NotificationId> tmp_buffer_;
   std::size_t capa_ = 100000000;
   std::size_t count_ = 0;
   std::size_t latency_ = 0;
