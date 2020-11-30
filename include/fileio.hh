@@ -157,6 +157,17 @@ inline void readAllFromFile(const std::string &path, String &buf) {
   file.close();
 }
 
+#if WALPMEM
+#include <numa.h>
+
+inline void genLogFileName(std::string &logpath, const int thid) {
+  unsigned node_num = numa_max_node() + 1;
+  unsigned node = thid % node_num;
+  if (numa_run_on_node(node) != 0) ERR;
+  logpath.clear();
+  logpath += "log" + std::to_string(node) + "/thid" + std::to_string(thid);
+}
+#else
 inline void genLogFileName(std::string &logpath, const int thid) {
   const int PATHNAME_SIZE = 512;
   char pathname[PATHNAME_SIZE];
@@ -168,3 +179,4 @@ inline void genLogFileName(std::string &logpath, const int thid) {
   logpath = pathname;
   logpath += "/log/log" + std::to_string(thid);
 }
+#endif

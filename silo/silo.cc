@@ -23,6 +23,9 @@
 #if DURABLE_EPOCH
 #include "include/notifier.hh"
 #endif
+#if WALPMEM
+#include <numa.h>
+#endif
 
 #include "../include/atomic_wrapper.hh"
 #include "../include/backoff.hh"
@@ -190,6 +193,9 @@ void set_cpu(std::thread &th, int cpu) {
 int main(int argc, char *argv[]) try {
   gflags::SetUsageMessage("Silo benchmark.");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
+#if WALPMEM
+  if (numa_available()!=0) ERR;
+#endif
 #if DURABLE_EPOCH
   LoggerAffinity affin;
   if (FLAGS_affinity.empty()) {
