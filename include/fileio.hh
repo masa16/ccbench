@@ -18,8 +18,22 @@
 #include <linux/fs.h>
 #endif  // Linux
 
+#if PMEMCPY
+#include <libpmem.h>
+#endif
+
 class File {
 private:
+#if PMEMCPY
+  char *pmemaddr_ = 0;
+  char *pmem_sync_;
+  char *pmem_offset_;
+  size_t sync_size_;
+  size_t write_size_;
+  size_t mapped_len_;
+  int is_pmem_;
+  std::string file_path_;
+#endif
   int fd_;
   bool autoClose_;
 
@@ -33,6 +47,32 @@ private:
 public:
   File() : fd_(-1), autoClose_(false) {}
 
+#if PMEMCPY
+#define BUF_LEN 500000000
+  bool open(const std::string &filePath, int flags) {
+    /* create a pmem file and memory map it */
+    pmemaddr_ = (char*)pmem_map_file(filePath.c_str(), BUF_LEN,
+                                    PMEM_FILE_CREATE,
+                                    0644, &mapped_len_, &is_pmem_);
+    pmem_sync_ = pmem_offset_ = pmemaddr_;
+    sync_size_ = write_size_ = 0;
+    file_path_ = filePath;
+    autoClose_ = true;
+    return pmemaddr_ != 0;
+  }
+
+  bool open(const std::string &filePath, int flags, mode_t mode) {
+    /* create a pmem file and memory map it */
+    pmemaddr_ = (char*)pmem_map_file(filePath.c_str(), BUF_LEN,
+                                    PMEM_FILE_CREATE,
+                                    mode, &mapped_len_, &is_pmem_);
+    pmem_sync_ = pmem_offset_ = pmemaddr_;
+    sync_size_ = write_size_ = 0;
+    file_path_ = filePath;
+    autoClose_ = true;
+    return pmemaddr_ != 0;
+  }
+#else
   bool open(const std::string &filePath, int flags) {
     fd_ = ::open(filePath.c_str(), flags);
     autoClose_ = true;
@@ -44,6 +84,7 @@ public:
     autoClose_ = true;
     return fd_ >= 0;
   }
+#endif
 
   File(const std::string &filePath, int flags) : File() {
     if (!this->open(filePath, flags)) throwOpenError(filePath);
@@ -59,6 +100,45 @@ public:
   ~File() noexcept try { close(); } catch (...) {
   }
 
+#if PMEMCPY
+
+  void close() {
+    if (!autoClose_ || pmemaddr_ == 0) return;
+    pmem_unmap(pmemaddr_, mapped_len_);
+    pmemaddr_ = 0;
+    if (::truncate(file_path_.c_str(), write_size_) != 0) ERR;
+  }
+
+  void write(const void *data, size_t size) {
+    if (is_pmem_) {
+      pmem_memcpy(pmem_offset_, data, size, PMEM_F_MEM_NODRAIN);
+    } else {
+      memcpy(pmem_offset_, data, size);
+    }
+    pmem_offset_ += size;
+    sync_size_ += size;
+    write_size_ += size;
+  }
+
+  void fsync() {
+    if (pmemaddr_ != 0) {
+      if (is_pmem_) {
+        pmem_persist(pmem_sync_, sync_size_);
+      } else {
+        pmem_msync(pmem_sync_, sync_size_);
+      }
+    }
+    pmem_sync_ += sync_size_;
+    sync_size_ = 0;
+  }
+
+  void ftruncate(off_t length) {
+  }
+
+  void read(void *data, size_t size) {
+  }
+
+#else
   int fd() const {
     if (fd_ < 0) ERR;
     return fd_;
@@ -118,6 +198,7 @@ public:
       throw LibcError(errno, "ftruncate failed: ");
     }
   }
+#endif
 };
 
 // create a file if it does not exist.
@@ -128,6 +209,18 @@ inline void createEmptyFile(const std::string &path, mode_t mode = 0644) {
   writer.close();
 }
 
+#if WALPMEM
+#include <numa.h>
+
+inline void genLogFileName(std::string &logpath, const int thid) {
+  unsigned node_num = numa_max_node() + 1;
+  unsigned node = thid % node_num;
+  if (numa_run_on_node(node) != 0) ERR;
+  logpath.clear();
+  logpath += "log" + std::to_string(node) + "/thid" + std::to_string(thid);
+}
+
+#else
 /**
  * Read all contents from a file.
  * Do not specify streams.
@@ -157,17 +250,6 @@ inline void readAllFromFile(const std::string &path, String &buf) {
   file.close();
 }
 
-#if WALPMEM
-#include <numa.h>
-
-inline void genLogFileName(std::string &logpath, const int thid) {
-  unsigned node_num = numa_max_node() + 1;
-  unsigned node = thid % node_num;
-  if (numa_run_on_node(node) != 0) ERR;
-  logpath.clear();
-  logpath += "log" + std::to_string(node) + "/thid" + std::to_string(thid);
-}
-#else
 inline void genLogFileName(std::string &logpath, const int thid) {
   const int PATHNAME_SIZE = 512;
   char pathname[PATHNAME_SIZE];

@@ -11,12 +11,12 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
   nid.tid_ = tid;
   nid.tx_end_ = rdtscp();
   // check buffer capa
-  if (log_set_.size() + write_set.size() > LOG_BUFFER_SIZE) {
+  if (log_set_size_ + write_set.size() > LOG_BUFFER_SIZE) {
     pool_.publish();
   }
   // buffering
   for (auto &itr : write_set) {
-    log_set_.emplace_back(tid, itr.key_, val);
+    log_set_[log_set_size_++] = LogRecord(tid, itr.key_, val);
   }
   nid_set_.emplace_back(nid);
   // epoch
@@ -26,7 +26,7 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
   if (epoch < min_epoch_) min_epoch_ = epoch;
   if (epoch > max_epoch_) max_epoch_ = epoch;
   // buffer full or new epoch begins
-  if (log_set_.size() == LOG_BUFFER_SIZE ||
+  if (log_set_size_ == LOG_BUFFER_SIZE ||
       nid_set_.size() == NID_BUFFER_SIZE || new_epoch_begins) {
     pool_.publish();
   }
@@ -75,19 +75,21 @@ void LogBufferPool::terminate(Result &myres) {
 void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer,
                       size_t &nid_count, size_t &byte_count) {
   // prepare header
-  LogHeader log_header;
-  for (auto &log : log_set_)
-    log_header.chkSum_ += log.computeChkSum();
-  log_header.logRecNum_ = log_set_.size();
+  alignas(512) LogHeader log_header;
+  for (size_t i=0; i<log_set_size_; i++)
+    log_header.chkSum_ += log_set_[i].computeChkSum();
+  log_header.logRecNum_ = log_set_size_;
   log_header.convertChkSumIntoComplementOnTwo();
   // write to file
   size_t header_size = sizeof(LogHeader);
   size_t record_size = sizeof(LogRecord) * log_header.logRecNum_;
   byte_count += header_size + record_size;
+  asm volatile("":: : "memory");
   logfile.write((void*)&log_header, header_size);
-  logfile.write((void*)&(log_set_[0]), record_size);
+  logfile.write((void*)log_set_, record_size);
+  asm volatile("":: : "memory");
   // clear for next transactions.
-  log_set_.clear();
+  log_set_size_ = 0;
   // copy NotificationID
   for (auto &nid : nid_set_) nid_buffer.emplace_back(nid);
   nid_count += nid_set_.size();

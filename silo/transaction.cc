@@ -283,6 +283,14 @@ void TxnExecutor::wal(std::uint64_t ctid) {
     asm volatile("":: : "memory");
   }
 }
+#elif PMEMTEST
+void TxnExecutor::wal(std::uint64_t ctid) {
+  for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
+    LogRecord log(ctid, (*itr).key_, write_val_);
+    logfile_.write((void*)&log, sizeof(LogRecord));
+  }
+  //logfile_.fsync();
+}
 #else
 void TxnExecutor::wal(std::uint64_t ctid) {
   for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {

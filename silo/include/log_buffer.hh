@@ -18,7 +18,8 @@ class LogBufferPool;
 
 class LogBuffer {
 private:
-  std::vector<LogRecord> log_set_;
+  alignas(512) LogRecord *log_set_;
+  size_t log_set_size_ = 0;
   std::vector<NotificationId> nid_set_;
   LogBufferPool &pool_;
 public:
@@ -32,8 +33,9 @@ public:
   bool empty();
 
   LogBuffer(LogBufferPool &pool) : pool_(pool) {
-    log_set_.reserve(LOG_BUFFER_SIZE);
     nid_set_.reserve(NID_BUFFER_SIZE);
+    log_set_ = new LogRecord[LOG_BUFFER_SIZE+4];
+    printf("log_set%%512=%lu\n",((size_t)log_set_)%512);
   }
 };
 
