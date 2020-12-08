@@ -48,7 +48,7 @@ public:
   File() : fd_(-1), autoClose_(false) {}
 
 #if PMEMCPY
-#define BUF_LEN 500000000
+#define BUF_LEN 2000000000
   bool open(const std::string &filePath, int flags) {
     /* create a pmem file and memory map it */
     pmemaddr_ = (char*)pmem_map_file(filePath.c_str(), BUF_LEN,
@@ -110,8 +110,12 @@ public:
   }
 
   void write(const void *data, size_t size) {
+    if (write_size_+size > BUF_LEN) {
+      perror("out of buffer");
+      ERR;
+    }
     if (is_pmem_) {
-      pmem_memcpy(pmem_offset_, data, size, PMEM_F_MEM_NODRAIN);
+      pmem_memcpy(pmem_offset_, data, size, 0);
     } else {
       memcpy(pmem_offset_, data, size);
     }
@@ -136,6 +140,9 @@ public:
   }
 
   void read(void *data, size_t size) {
+  }
+
+  size_t readsome(void *data, size_t size) {
   }
 
 #else
