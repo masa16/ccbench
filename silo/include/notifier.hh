@@ -19,6 +19,12 @@ public:
     id_(id), thread_id_(thread_id), tx_start_(tx_start) {}
 
   NotificationId() {NotificationId(0,0,0);}
+
+  std::uint64_t epoch() {
+    Tidword tid;
+    tid.obj_ = tid_;
+    return tid.epoch;
+  }
 };
 
 class PepochFile {
@@ -35,6 +41,30 @@ public:
 
 class Logger;
 
+class NidBufferItem {
+ public:
+  std::uint64_t epoch_;
+  std::vector<NotificationId> buffer_;
+  NidBufferItem *next_ = NULL;
+  NidBufferItem(std::uint64_t epoch) : epoch_(epoch) {
+    buffer_.reserve(2097152);
+  }
+};
+
+class NidBuffer {
+private:
+  std::size_t size_ = 0;
+public:
+  NidBufferItem *front_ = NULL;
+  NidBufferItem *end_ = NULL;
+  void store(std::vector<NotificationId> &nid_buffer);
+  void notify(std::uint64_t min_dl, std::uint64_t &latency,
+              std::uint64_t &min_latency, std::uint64_t &max_latency,
+              std::size_t &count);
+  std::size_t size() {return size_;}
+  bool empty() {return size_ == 0;}
+};
+
 class Notifier {
 private:
   std::thread thread_;
@@ -42,7 +72,7 @@ private:
   std::condition_variable cv_enq_;
   std::condition_variable cv_deq_;
   std::condition_variable cv_finish_;
-  std::vector<NotificationId> buffer_;
+  NidBuffer buffer_;
   std::size_t capa_ = 100000000;
   std::size_t count_ = 0;
   std::size_t latency_ = 0;
@@ -67,13 +97,12 @@ public:
   PepochFile pepoch_file_;
 
   Notifier() {
-    buffer_.reserve(65536);
     latency_log_.reserve(65536);
     start_clock_ = rdtscp();
     pepoch_file_.open();
   }
   void add_logger(Logger *logger);
-  void make_durable(std::vector<NotificationId> &nid_buffer, bool quit);
+  void make_durable(bool quit);
   void worker();
   void run();
   void push(std::vector<NotificationId> &nid_buffer, bool quit);

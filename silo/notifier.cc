@@ -42,7 +42,7 @@ void Notifier::add_logger(Logger *logger) {
   logger_set_.emplace(logger);
 }
 
-void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) {
+void Notifier::make_durable(bool quit) {
   // calculate min(d_l)
   uint64_t min_dl = __atomic_load_n(&(ThLocalDurableEpoch[0].obj_), __ATOMIC_ACQUIRE);
   for (unsigned int i=1; i < FLAGS_logger_num; ++i) {
@@ -64,29 +64,12 @@ void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) 
   __atomic_store_n(&(DurableEpoch.obj_), min_dl, __ATOMIC_RELEASE);
   asm volatile("":: : "memory");
   // Durable Latency
-  uint64_t t = rdtscp();
   uint64_t latency = 0;
   uint64_t min_latency = ~(uint64_t)0;
   uint64_t max_latency = 0;
   size_t count = 0;
-  size_t rest = 0;
-  for (auto &nid : nid_buffer) {
-    Tidword tidw;
-    tidw.obj_ = nid.tid_;
-    std::uint64_t epoch = tidw.epoch;
-    if (epoch <= min_dl || quit) {
-      // notify client here
-      auto dt = t - nid.tx_start_;
-      latency += dt;
-      if (dt < min_latency) min_latency = dt;
-      if (dt > max_latency) max_latency = dt;
-      ++count;
-    } else {
-      // Not-Durable Tx
-      nid_buffer[rest++] = nid;
-    }
-  }
-  nid_buffer.resize(rest);
+  // notify client
+  buffer_.notify(quit?~(uint64_t)0:min_dl, latency, min_latency, max_latency, count);
 #if NOTIFIER_THREAD
   cv_enq_.notify_one();
 #endif
@@ -100,6 +83,7 @@ void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) 
     __atomic_fetch_add(&count_, count, __ATOMIC_ACQ_REL);
     asm volatile("":: : "memory");
 #endif
+    uint64_t t = rdtscp();
     latency_log_.emplace_back(
       std::array<std::uint64_t,6>{
         min_dl, t-start_clock_, count, latency/count, min_latency, max_latency,
@@ -113,7 +97,7 @@ void Notifier::worker() {
   while(!(quit_ && buffer_.empty())) {
     std::unique_lock<std::mutex> lock(mutex_);
     cv_deq_.wait(lock, [this]{return quit_ || !buffer_.empty();});
-    make_durable(buffer_, quit_);
+    make_durable(quit_);
   }
 }
 #endif
@@ -124,25 +108,84 @@ void Notifier::run() {
 #endif
 }
 
+
+void NidBuffer::notify(std::uint64_t min_dl, std::uint64_t &latency,
+                       std::uint64_t &min_latency, std::uint64_t &max_latency,
+                       std::size_t &count) {
+  if (front_ == NULL) return;
+  NidBufferItem *orig_front = front_;
+  int empty_count = 0;
+  while (front_->epoch_ <= min_dl) {
+    for (auto &nid : front_->buffer_) {
+      // notify client here
+      uint64_t t = rdtscp();
+      std::uint64_t dt = t - nid.tx_start_;
+      latency += dt;
+      if (dt < min_latency) min_latency = dt;
+      if (dt > max_latency) max_latency = dt;
+      ++count;
+    }
+    size_ -= front_->buffer_.size();
+    front_->buffer_.clear();
+    if (front_->next_ == NULL) {
+      break;
+    }
+    if (end_->buffer_.empty()) empty_count++;
+    if (empty_count >= 2) {
+      // release buffer
+      //printf("delete front_=%lx front_->next_=%lx front_->epoch_=%lu\n",(uint64_t)front_,(uint64_t)front_->next_, front_->epoch_);
+      NidBufferItem *old_front = front_;
+      front_ = front_->next_;
+      delete old_front;
+    } else {
+      // recycle buffer
+      front_->epoch_ = end_->epoch_ + 1;
+      end_->next_ = front_;
+      end_ = front_;
+      front_ = front_->next_;
+      end_->next_ = NULL;
+    }
+    if (front_ == orig_front) break;
+  }
+}
+
+void NidBuffer::store(std::vector<NotificationId> &nid_buffer) {
+  for (auto &nid : nid_buffer) {
+    auto epoch = nid.epoch();
+    if (front_ == NULL) {
+      front_ = end_ = new NidBufferItem(epoch);
+    }
+    NidBufferItem *itr = front_;
+    while (itr->epoch_ < epoch) {
+      if (itr->next_ == NULL) {
+        // create buffer
+        itr->next_ = end_ = new NidBufferItem(itr->epoch_+1);
+        //printf("create end_=%lx end_->next_=%lx end_->epoch_=%lu\n",(uint64_t)end_,(uint64_t)end_->next_, end_->epoch_);
+      }
+      itr = itr->next_;
+    }
+    assert(itr->epoch == epoch);
+    itr->buffer_.emplace_back(nid);
+  }
+  size_ += nid_buffer.size();
+  nid_buffer.clear();
+}
+
 #if NOTIFIER_THREAD
 void Notifier::push(std::vector<NotificationId> &nid_buffer, bool quit) {
   std::unique_lock<std::mutex> lock(mutex_);
   push_size_ = nid_buffer.size();
   cv_enq_.wait(lock, [this]{return buffer_.size() + push_size_ <= capa_;});
   push_size_ = 0;
-  for (auto &nid : nid_buffer) {
-    buffer_.emplace_back(nid);
-  }
+  buffer_.store(nid_buffer);
   cv_deq_.notify_one();
-  nid_buffer.clear();
 }
 #else
 void Notifier::push(std::vector<NotificationId> &nid_buffer, bool quit) {
   std::unique_lock<std::mutex> lock(mutex_);
   //if (buffer_.size() + nid_buffer.size() > capa_) return;
-  for (auto &nid : nid_buffer) buffer_.emplace_back(nid);
-  nid_buffer.clear();
-  make_durable(buffer_, quit);
+  buffer_.store(nid_buffer);
+  make_durable(quit);
 }
 #endif
 
