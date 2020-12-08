@@ -47,6 +47,7 @@ target_link_libraries(silo.exe
         ${PROJECT_SOURCE_DIR}/../third_party/mimalloc/out/release/libmimalloc.a
         ${PROJECT_SOURCE_DIR}/../third_party/masstree/libkohler_masstree_json.a
         Threads::Threads
+        numa
         )
 
 if (DEFINED ADD_ANALYSIS)
@@ -117,8 +118,6 @@ endif ()
 
 if (DEFINED WALPMEM)
     add_definitions(-DWALPMEM=${WALPMEM})
-    target_link_libraries(silo.exe numa)
-    target_link_libraries(replay_test.exe numa)
     target_link_libraries(silo.exe pmem)
     target_link_libraries(replay_test.exe pmem)
 else ()
