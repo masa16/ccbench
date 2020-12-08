@@ -52,7 +52,12 @@ void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) 
     }
   }
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
-  if (d >= min_dl && !quit) return;
+  if (d >= min_dl && !quit) {
+#if NOTIFIER_THREAD
+    cv_enq_.notify_one();
+#endif
+    return;
+  }
   // store Durable Epoch
   pepoch_file_.write(min_dl);
   asm volatile("":: : "memory");
@@ -69,7 +74,7 @@ void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) 
     Tidword tidw;
     tidw.obj_ = nid.tid_;
     std::uint64_t epoch = tidw.epoch;
-    if (epoch <= min_dl) {
+    if (epoch <= min_dl || quit) {
       // notify client here
       auto dt = t - nid.tx_start_;
       latency += dt;
@@ -83,22 +88,24 @@ void Notifier::make_durable(std::vector<NotificationId> &nid_buffer, bool quit) 
   }
   nid_buffer.resize(rest);
 #if NOTIFIER_THREAD
+  cv_enq_.notify_one();
+#endif
   if (count > 0) {
+#if NOTIFIER_THREAD
     latency_ += latency;
     count_ += count;
-  }
-  cv_enq_.notify_one();
 #else
-  if (count == 0) return;
-  asm volatile("":: : "memory");
-  __atomic_fetch_add(&latency_, latency, __ATOMIC_ACQ_REL);
-  __atomic_fetch_add(&count_, count, __ATOMIC_ACQ_REL);
-  asm volatile("":: : "memory");
+    asm volatile("":: : "memory");
+    __atomic_fetch_add(&latency_, latency, __ATOMIC_ACQ_REL);
+    __atomic_fetch_add(&count_, count, __ATOMIC_ACQ_REL);
+    asm volatile("":: : "memory");
 #endif
-  latency_log_.emplace_back(
-    std::array<std::uint64_t,6>{
-      min_dl, t-start_clock_, count, latency/count, min_latency, max_latency,
-    });
+    latency_log_.emplace_back(
+      std::array<std::uint64_t,6>{
+        min_dl, t-start_clock_, count, latency/count, min_latency, max_latency,
+      });
+    usleep(20*1000);
+  }
 }
 
 #if NOTIFIER_THREAD

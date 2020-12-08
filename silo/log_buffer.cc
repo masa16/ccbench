@@ -84,10 +84,8 @@ void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer,
   size_t header_size = sizeof(LogHeader);
   size_t record_size = sizeof(LogRecord) * log_header.logRecNum_;
   byte_count += header_size + record_size;
-  asm volatile("":: : "memory");
   logfile.write((void*)&log_header, header_size);
   logfile.write((void*)log_set_, record_size);
-  asm volatile("":: : "memory");
   // clear for next transactions.
   log_set_size_ = 0;
   // copy NotificationID
