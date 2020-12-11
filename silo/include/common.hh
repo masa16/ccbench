@@ -41,7 +41,8 @@ DEFINE_uint64(rratio, 50, "read ratio of single transaction.");
 DEFINE_uint64(thread_num, 10, "Total number of worker threads.");
 DEFINE_uint64(logger_num, 1, "Total number of logger threads.");
 DEFINE_string(affinity, "", "CPU affinity between worker and logger thread, e.g., \"0:1,2,3+4:5,6,7\" (overwrites thread_num&logger_num).");
-DEFINE_uint64(buffer_num, 4, "Number of log buffers per logger thread.");
+DEFINE_uint64(buffer_num, 2, "Number of log buffers per logger thread.");
+DEFINE_uint64(buffer_size, 512, "Size of log buffer in KiB");
 DEFINE_uint64(tuple_num, 1000000, "Total number of records.");
 DEFINE_bool(ycsb, true,
             "True uses zipf_skew, false uses faster random generator.");
@@ -57,6 +58,7 @@ DECLARE_uint64(thread_num);
 DECLARE_uint64(logger_num);
 DECLARE_string(affinity);
 DECLARE_uint64(buffer_num);
+DECLARE_uint64(buffer_size);
 DECLARE_uint64(tuple_num);
 DECLARE_bool(ycsb);
 DECLARE_double(zipf_skew);
