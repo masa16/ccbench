@@ -57,7 +57,7 @@ public:
 #if DURABLE_EPOCH
   LogBufferPool log_buffer_pool_;
   NotificationId nid_;
-  std::uint64_t nid_counter_ = 0; // Notification ID
+  std::uint32_t nid_counter_ = 0; // Notification ID
 #endif
 
   TxnExecutor(int thid, Result *sres);

@@ -8,8 +8,8 @@
 #include "log.hh"
 #include "common.hh"
 
-#define LOG_BUFFER_SIZE (512000/sizeof(LogRecord))
-#define NID_BUFFER_SIZE (51200/sizeof(LogRecord))
+#define LOG_BUFFER_SIZE (1280*1024/sizeof(LogRecord))
+#define NID_BUFFER_SIZE (1280*1024/sizeof(LogRecord))
 
 class LogQueue;
 class NotificationId;

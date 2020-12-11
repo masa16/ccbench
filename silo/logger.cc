@@ -68,7 +68,7 @@ void Logger::add_txn_executor(TxnExecutor &trans) {
 void Logger::logging(bool quit) {
   size_t q_size = queue_.size();
   if (q_size == 0) return;
-  if (max_buffers_ < q_size) max_buffers_ = q_size;
+  //if (max_buffers_ < q_size) max_buffers_ = q_size;
   if (q_size > thid_vec_.size()) q_size = thid_vec_.size();
   // calculate min(ctid_w)
   uint64_t min_ctid = ~(uint64_t)0;

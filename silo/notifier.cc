@@ -88,7 +88,6 @@ void Notifier::make_durable(bool quit) {
       std::array<std::uint64_t,6>{
         min_dl, t-start_clock_, count, latency/count, min_latency, max_latency,
       });
-    usleep(20*1000);
   }
 }
 
@@ -115,25 +114,33 @@ void NidBuffer::notify(std::uint64_t min_dl, std::uint64_t &latency,
   if (front_ == NULL) return;
   NidBufferItem *orig_front = front_;
   int empty_count = 0;
+  uint64_t ltc = 0;
+  uint64_t min_ltc = ~(uint64_t)0;
+  uint64_t max_ltc = 0;
   while (front_->epoch_ <= min_dl) {
+    uint64_t t = rdtscp();
     for (auto &nid : front_->buffer_) {
       // notify client here
-      uint64_t t = rdtscp();
       std::uint64_t dt = t - nid.tx_start_;
-      latency += dt;
-      if (dt < min_latency) min_latency = dt;
-      if (dt > max_latency) max_latency = dt;
-      ++count;
+      ltc += dt;
+      /*
+      if (dt < min_ltc) min_ltc = dt;
+      if (dt > max_ltc) max_ltc = dt;
+      */
     }
+    latency += ltc;
+    /*
+    if (min_ltc < min_latency) min_latency = min_ltc;
+    if (max_ltc > max_latency) max_latency = max_ltc;
+    */
+    count += front_->buffer_.size();
     size_ -= front_->buffer_.size();
     front_->buffer_.clear();
-    if (front_->next_ == NULL) {
-      break;
-    }
-    if (end_->buffer_.empty()) empty_count++;
-    if (empty_count >= 2) {
+    if (front_->next_ == NULL) break;
+    //if (end_->epoch_ > max_epoch_+4) {
+    if (false) {
       // release buffer
-      //printf("delete front_=%lx front_->next_=%lx front_->epoch_=%lu\n",(uint64_t)front_,(uint64_t)front_->next_, front_->epoch_);
+      //printf("delete front_=%lx front_->next_=%lx front_->epoch_=%lu end_->epoch_=%lu max_epoch_=%lu min_dl=%lu\n",(uint64_t)front_,(uint64_t)front_->next_,front_->epoch_,end_->epoch_,max_epoch_,min_dl);
       NidBufferItem *old_front = front_;
       front_ = front_->next_;
       delete old_front;
@@ -152,15 +159,13 @@ void NidBuffer::notify(std::uint64_t min_dl, std::uint64_t &latency,
 void NidBuffer::store(std::vector<NotificationId> &nid_buffer) {
   for (auto &nid : nid_buffer) {
     auto epoch = nid.epoch();
-    if (front_ == NULL) {
-      front_ = end_ = new NidBufferItem(epoch);
-    }
     NidBufferItem *itr = front_;
     while (itr->epoch_ < epoch) {
       if (itr->next_ == NULL) {
         // create buffer
-        itr->next_ = end_ = new NidBufferItem(itr->epoch_+1);
-        //printf("create end_=%lx end_->next_=%lx end_->epoch_=%lu\n",(uint64_t)end_,(uint64_t)end_->next_, end_->epoch_);
+        itr->next_ = end_ = new NidBufferItem(epoch);
+        if (max_epoch_ < epoch) max_epoch_ = epoch;
+        //printf("create end_=%lx end_->next_=%lx end_->epoch_=%lu epoch=%lu max_epoch_=%lu\n",(uint64_t)end_,(uint64_t)end_->next_, end_->epoch_, epoch, max_epoch_);
       }
       itr = itr->next_;
     }

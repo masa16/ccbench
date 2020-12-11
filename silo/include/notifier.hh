@@ -9,13 +9,12 @@
 
 class NotificationId {
 public:
-  uint64_t id_;
-  uint64_t thread_id_;
+  uint32_t id_;
+  uint32_t thread_id_;
   uint64_t tx_start_;
-  uint64_t tx_end_ = 0;
   uint64_t tid_;
 
-  NotificationId(uint64_t id, uint64_t thread_id, uint64_t tx_start) :
+  NotificationId(uint32_t id, uint32_t thread_id, uint64_t tx_start) :
     id_(id), thread_id_(thread_id), tx_start_(tx_start) {}
 
   NotificationId() {NotificationId(0,0,0);}
@@ -54,9 +53,13 @@ class NidBufferItem {
 class NidBuffer {
 private:
   std::size_t size_ = 0;
+  std::uint64_t max_epoch_ = 0;
 public:
-  NidBufferItem *front_ = NULL;
-  NidBufferItem *end_ = NULL;
+  NidBufferItem *front_;
+  NidBufferItem *end_;
+  NidBuffer() {
+    front_ = end_ = new NidBufferItem(0);
+  }
   void store(std::vector<NotificationId> &nid_buffer);
   void notify(std::uint64_t min_dl, std::uint64_t &latency,
               std::uint64_t &min_latency, std::uint64_t &max_latency,

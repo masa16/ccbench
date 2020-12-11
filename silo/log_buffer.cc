@@ -9,7 +9,7 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
                      std::vector<WriteElement<Tuple>> &write_set,
                      char *val, bool new_epoch_begins) {
   nid.tid_ = tid;
-  nid.tx_end_ = rdtscp();
+  //nid.tx_end_ = rdtscp();
   // check buffer capa
   if (log_set_size_ + write_set.size() > LOG_BUFFER_SIZE) {
     pool_.publish();
@@ -32,7 +32,7 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
   }
   auto t = rdtscp();
   pool_.txn_latency_ += t - nid.tx_start_;
-  pool_.bkpr_latency_ += t - nid.tx_end_;
+  //pool_.bkpr_latency_ += t - nid.tx_end_;
 }
 
 static std::mutex smutex;
