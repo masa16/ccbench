@@ -67,7 +67,11 @@ void Logger::add_txn_executor(TxnExecutor &trans) {
 
 void Logger::logging(bool quit) {
   size_t q_size = queue_.size();
-  if (q_size == 0) return;
+  if (q_size == 0) {
+    if (quit)
+      notifier_.push(nid_buffer_, quit);
+    return;
+  }
   //if (max_buffers_ < q_size) max_buffers_ = q_size;
   if (q_size > thid_vec_.size()) q_size = thid_vec_.size();
   // calculate min(ctid_w)
@@ -92,7 +96,8 @@ void Logger::logging(bool quit) {
   if (write_start_==0) write_start_ = t;
   for (size_t i=0; i<q_size; ++i) {
     auto log_buffer = queue_.deq();
-    if (log_buffer->max_epoch_ > max_epoch) max_epoch = log_buffer->max_epoch_;
+    if (log_buffer->max_epoch_ > max_epoch)
+      max_epoch = log_buffer->max_epoch_;
     log_buffer->write(logfile_, nid_buffer_, nid_count_, byte_count_);
   }
 #ifdef Linux

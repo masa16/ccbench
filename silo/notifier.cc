@@ -64,12 +64,13 @@ void Notifier::make_durable(bool quit) {
   __atomic_store_n(&(DurableEpoch.obj_), min_dl, __ATOMIC_RELEASE);
   asm volatile("":: : "memory");
   // Durable Latency
+  uint64_t epoch = (quit) ? (~(uint64_t)0) : min_dl;
   uint64_t latency = 0;
   uint64_t min_latency = ~(uint64_t)0;
   uint64_t max_latency = 0;
   size_t count = 0;
   // notify client
-  buffer_.notify(quit?~(uint64_t)0:min_dl, latency, min_latency, max_latency, count);
+  buffer_.notify(epoch, latency, min_latency, max_latency, count);
 #if NOTIFIER_THREAD
   cv_enq_.notify_one();
 #endif
@@ -123,16 +124,12 @@ void NidBuffer::notify(std::uint64_t min_dl, std::uint64_t &latency,
       // notify client here
       std::uint64_t dt = t - nid.tx_start_;
       ltc += dt;
-      /*
       if (dt < min_ltc) min_ltc = dt;
       if (dt > max_ltc) max_ltc = dt;
-      */
     }
     latency += ltc;
-    /*
     if (min_ltc < min_latency) min_latency = min_ltc;
     if (max_ltc > max_latency) max_latency = max_ltc;
-    */
     count += front_->buffer_.size();
     size_ -= front_->buffer_.size();
     front_->buffer_.clear();
