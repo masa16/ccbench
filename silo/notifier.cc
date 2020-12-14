@@ -102,9 +102,14 @@ void Notifier::worker() {
 }
 #endif
 
-void Notifier::run() {
+void set_cpu(std::thread &th, int cpu);
+
+  void Notifier::run() {
 #if NOTIFIER_THREAD
   thread_ = std::thread([this]{worker();});
+  if (!FLAGS_notifier_cpu >= 0) {
+    set_cpu(thread_,FLAGS_notifier_cpu);
+  }
 #endif
 }
 
