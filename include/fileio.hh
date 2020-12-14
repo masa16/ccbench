@@ -47,27 +47,6 @@ private:
 public:
   File() : fd_(-1), autoClose_(false) {}
 
-#if NOLOG
-  bool open(const std::string &filePath, int flags) {return true;}
-  bool open(const std::string &filePath, int flags, mode_t mode) {return true;}
-  File(const std::string &filePath, int flags) : File() {}
-  File(const std::string &filePath, int flags, mode_t mode) : File() {}
-  explicit File(int fd, bool autoClose = false)
-    : fd_(fd), autoClose_(autoClose) {}
-  ~File() noexcept try {close();} catch (...) {
-  }
-  void close() {}
-  void write(const void *data, size_t size) {}
-  void read(void *data, size_t size) {}
-  size_t readsome(void *data, size_t size) {return size;}
-  int fd() const { return fd_; }
-  void close() {}
-  void fdatasync() {}
-  void fsync() {}
-  void ftruncate(off_t length) {}
-
-#else
-
 #if PMEMCPY
 #define BUF_LEN 2000000000
   bool open(const std::string &filePath, int flags) {
@@ -197,6 +176,7 @@ public:
   }
 
   void write(const void *data, size_t size) {
+#if !NOLOG
     const char *buf = reinterpret_cast<const char *>(data);
     size_t s = 0;
     while (s < size) {
@@ -205,20 +185,25 @@ public:
       if (r == 0) ERR;
       s += r;
     }
+#endif
   }
 
 #ifdef Linux
   void fdatasync() {
+#if !NOLOG
     if (::fdatasync(fd()) < 0) {
       throw LibcError(errno, "fdsync failed: ");
     }
+#endif
   }
 #endif  // Linux
 
   void fsync() {
+#if !NOLOG
     if (::fsync(fd()) < 0) {
       throw LibcError(errno, "fsync failed: ");
     }
+#endif
   }
 
   void ftruncate(off_t length) {
@@ -227,7 +212,6 @@ public:
     }
   }
 #endif //PMEMCPY
-#endif //DUMMYIO
 };
 
 // create a file if it does not exist.
