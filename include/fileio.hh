@@ -64,6 +64,7 @@ public:
   void close() {}
   void fdatasync() {}
   void fsync() {}
+  void ftruncate(off_t length) {}
 
 #else
 
