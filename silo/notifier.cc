@@ -107,7 +107,7 @@ void set_cpu(std::thread &th, int cpu);
   void Notifier::run() {
 #if NOTIFIER_THREAD
   thread_ = std::thread([this]{worker();});
-  if (!FLAGS_notifier_cpu >= 0) {
+  if (FLAGS_notifier_cpu >= 0) {
     set_cpu(thread_,FLAGS_notifier_cpu);
   }
 #endif
@@ -125,6 +125,7 @@ void NidBuffer::notify(std::uint64_t min_dl, std::uint64_t &latency,
   uint64_t max_ltc = 0;
   while (front_->epoch_ <= min_dl) {
     uint64_t t = rdtscp();
+#if NOLOG
     for (auto &nid : front_->buffer_) {
       // notify client here
       std::uint64_t dt = t - nid.tx_start_;
@@ -132,6 +133,7 @@ void NidBuffer::notify(std::uint64_t min_dl, std::uint64_t &latency,
       if (dt < min_ltc) min_ltc = dt;
       if (dt > max_ltc) max_ltc = dt;
     }
+#endif
     latency += ltc;
     if (min_ltc < min_latency) min_latency = min_ltc;
     if (max_ltc > max_latency) max_latency = max_ltc;
