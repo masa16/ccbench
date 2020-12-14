@@ -125,7 +125,7 @@ void NidBuffer::notify(std::uint64_t min_dl, std::uint64_t &latency,
   uint64_t max_ltc = 0;
   while (front_->epoch_ <= min_dl) {
     uint64_t t = rdtscp();
-#if NOLOG
+#if !NOLOG
     for (auto &nid : front_->buffer_) {
       // notify client here
       std::uint64_t dt = t - nid.tx_start_;
