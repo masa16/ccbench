@@ -39,7 +39,7 @@ node   0   1   2   3   4   5   6   7
   6:  21  21  21  21  21  21  10  11
   7:  21  21  21  21  21  21  11  10
 '
-#numa_h = `numactl -H`
+numa_h = `numactl -H`
 if ARGV.size < 2
   puts "usage: ruby "+File.basename(__FILE__)+" nodes n_worker/node [n_logger/node] [n_logger/core]"
   exit
