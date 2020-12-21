@@ -73,7 +73,7 @@ void Logger::logging(bool quit) {
     return;
   }
   //if (max_buffers_ < q_size) max_buffers_ = q_size;
-  if (q_size > thid_vec_.size()) q_size = thid_vec_.size();
+  //if (q_size > thid_vec_.size()) q_size = thid_vec_.size();
   // calculate min(ctid_w)
   uint64_t min_ctid = ~(uint64_t)0;
   for (auto itr : thid_vec_) {
