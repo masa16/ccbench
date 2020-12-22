@@ -449,7 +449,7 @@ void TxnExecutor::writePhase() {
   maxtid.latest = 1;
   mrctid_ = maxtid;
 
-#if WAL || DURABLE_EPOCH
+#if WAL
   wal(maxtid.obj_);
 #endif
 
@@ -468,6 +468,10 @@ void TxnExecutor::writePhase() {
     }
     storeRelease((*itr).rcdptr_->tidword_.obj_, maxtid.obj_);
   }
+
+#if DURABLE_EPOCH
+  wal(maxtid.obj_);
+#endif
 
   read_set_.clear();
   write_set_.clear();
