@@ -2,6 +2,7 @@
 #include <array>
 #include <queue>
 #include <condition_variable>
+#include <numa.h>
 #include "../../include/fileio.hh"
 #include "tuple.hh"
 #include "silo_op_element.hh"
@@ -9,6 +10,7 @@
 #include "common.hh"
 
 #define LOG_BUFFER_SIZE (FLAGS_buffer_size*1024/sizeof(LogRecord))
+#define LOG_ALLOC_SIZE (LOG_BUFFER_SIZE+512/sizeof(LogRecord)+1)
 #define NID_BUFFER_SIZE (LOG_BUFFER_SIZE/4)
 
 class LogQueue;
@@ -35,12 +37,11 @@ public:
 
   LogBuffer(LogBufferPool &pool) : pool_(pool) {
     nid_set_.reserve(NID_BUFFER_SIZE);
-    std::size_t n = LOG_BUFFER_SIZE+512/sizeof(LogRecord)+1;
-    void *ptr = log_set_ptr_ = new LogRecord[n];
-    std::size_t space = n*sizeof(LogRecord);
+    void *ptr = log_set_ptr_ = new LogRecord[LOG_ALLOC_SIZE];
+    std::size_t space = LOG_ALLOC_SIZE*sizeof(LogRecord);
     std::align(512, LOG_BUFFER_SIZE*sizeof(LogRecord), ptr, space);
-    log_set_ = (LogRecord*)ptr;
     if (space < LOG_BUFFER_SIZE*sizeof(LogRecord)) ERR;
+    log_set_ = (LogRecord*)ptr;
   }
   ~LogBuffer() {
     delete log_set_ptr_;
@@ -60,6 +61,8 @@ public:
   std::uint64_t bkpr_latency_ = 0;
 
   LogBufferPool() {
+    struct bitmask *mask = numa_get_interleave_mask();
+    numa_set_localalloc();
     buffer_.reserve(FLAGS_buffer_num);
     for (int i=0; i<FLAGS_buffer_num; i++) {
       buffer_.emplace_back(*this);
@@ -69,6 +72,7 @@ public:
     for (int i=1; i<FLAGS_buffer_num; i++) {
       pool_.push_back(&buffer_[i]);
     }
+    numa_set_interleave_mask(mask);
   }
   void publish();
   void return_buffer(LogBuffer *lb);
