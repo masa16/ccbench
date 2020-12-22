@@ -20,3 +20,5 @@ build() {
 
 build test_0log -D DURABLE_EPOCH=0
 build test_nlog -D DURABLE_EPOCH=1
+build test_0log_noidx -D DURABLE_EPOCH=0 -D MASSTREE_USE=0
+build test_nlog_noidx -D DURABLE_EPOCH=1 -D MASSTREE_USE=1
