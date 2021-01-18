@@ -59,6 +59,8 @@ public:
   bool quit_ = false;
   std::uint64_t txn_latency_ = 0;
   std::uint64_t bkpr_latency_ = 0;
+  std::uint64_t publish_latency_ = 0;
+  std::uint64_t publish_counts_ = 0;
 
   LogBufferPool() {
     struct bitmask *mask = numa_get_interleave_mask();

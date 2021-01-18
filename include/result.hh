@@ -43,6 +43,8 @@ public:
 #if DURABLE_EPOCH
   uint64_t local_bkpr_latency_ = 0;
   uint64_t local_txn_latency_ = 0;
+  uint64_t local_publish_latency_ = 0;
+  uint64_t local_publish_counts_ = 0;
 #endif
 
   uint64_t total_abort_counts_ = 0;
@@ -82,6 +84,8 @@ public:
 #if DURABLE_EPOCH
   uint64_t total_bkpr_latency_ = 0;
   uint64_t total_txn_latency_ = 0;
+  uint64_t total_publish_latency_ = 0;
+  uint64_t total_publish_counts_ = 0;
 #endif
 
   void displayAbortCounts();
@@ -136,6 +140,7 @@ public:
 #endif
 #if DURABLE_EPOCH
   void displayBackPressureLatencyRate();
+  void displayPublishLatency(size_t clocks_per_us);
 #endif
 
   void addLocalAllResult(const Result &other);
@@ -177,5 +182,7 @@ public:
 #if DURABLE_EPOCH
   void addLocalBkprLatency(const uint64_t count);
   void addLocalTxnLatency(const uint64_t count);
+  void addLocalPublishLatency(const uint64_t count);
+  void addLocalPublishCounts(const uint64_t count);
 #endif
 };

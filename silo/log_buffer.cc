@@ -39,6 +39,7 @@ static std::mutex smutex;
 static bool first = true;
 
 void LogBufferPool::publish() {
+  uint64_t t = rdtscp();
   // enqueue
   queue_->enq(current_buffer_);
   // pool empty message
@@ -54,6 +55,8 @@ void LogBufferPool::publish() {
   cv_deq_.wait(lock, [this]{return quit_ || !pool_.empty();});
   current_buffer_ = pool_.back();
   pool_.pop_back();
+  publish_latency_ += rdtscp() - t;
+  publish_counts_++;
 }
 
 void LogBufferPool::return_buffer(LogBuffer *lb) {
@@ -70,6 +73,8 @@ void LogBufferPool::terminate(Result &myres) {
   }
   myres.local_txn_latency_ = txn_latency_;
   myres.local_bkpr_latency_ = bkpr_latency_;
+  myres.local_publish_latency_ = publish_latency_;
+  myres.local_publish_counts_ = publish_counts_;
 }
 
 void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer,

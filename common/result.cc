@@ -312,6 +312,12 @@ void Result::displayBackPressureLatencyRate() {
     cout << fixed << setprecision(4) << "backpressure_latency_rate:\t" << r << endl;
   }
 }
+void Result::displayPublishLatency(size_t clocks_per_us) {
+  if (total_publish_latency_) {
+    double t = (double)total_publish_latency_ / clocks_per_us / total_publish_counts_;
+    cout << fixed << setprecision(4) << "publish_latency[us]:\t" << t << endl;
+  }
+}
 #endif
 
 void Result::addLocalAbortCounts(const uint64_t count) {
@@ -438,6 +444,12 @@ void Result::addLocalBkprLatency(const uint64_t count) {
 void Result::addLocalTxnLatency(const uint64_t count) {
   total_txn_latency_ += count;
 }
+void Result::addLocalPublishLatency(const uint64_t count) {
+  total_publish_latency_ += count;
+}
+void Result::addLocalPublishCounts(const uint64_t count) {
+  total_publish_counts_ += count;
+}
 #endif
 
 void Result::displayAllResult([[maybe_unused]] size_t clocks_per_us,
@@ -476,6 +488,7 @@ void Result::displayAllResult([[maybe_unused]] size_t clocks_per_us,
 #endif
 #if DURABLE_EPOCH
   displayBackPressureLatencyRate();
+  displayPublishLatency(clocks_per_us);
 #endif
   displayAbortCounts();
   displayCommitCounts();
@@ -523,5 +536,7 @@ void Result::addLocalAllResult(const Result &other) {
 #if DURABLE_EPOCH
   addLocalTxnLatency(other.local_txn_latency_);
   addLocalBkprLatency(other.local_bkpr_latency_);
+  addLocalPublishLatency(other.local_publish_latency_);
+  addLocalPublishCounts(other.local_publish_counts_);
 #endif
 }
