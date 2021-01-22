@@ -9,7 +9,7 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
                      std::vector<WriteElement<Tuple>> &write_set,
                      char *val, bool new_epoch_begins) {
   nid.tid_ = tid;
-  //nid.tx_end_ = rdtscp();
+  nid.t_mid_ = rdtscp();
   // check buffer capa
   if (log_set_size_ + write_set.size() > LOG_BUFFER_SIZE) {
     pool_.publish();
@@ -77,8 +77,7 @@ void LogBufferPool::terminate(Result &myres) {
   myres.local_publish_counts_ = publish_counts_;
 }
 
-void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer,
-                      size_t &nid_count, size_t &byte_count) {
+void LogBuffer::write(File &logfile, size_t &byte_count) {
   // prepare header
   alignas(512) LogHeader log_header;
   for (size_t i=0; i<log_set_size_; i++)
@@ -93,13 +92,29 @@ void LogBuffer::write(File &logfile, std::vector<NotificationId> &nid_buffer,
   logfile.write((void*)log_set_, record_size);
   // clear for next transactions.
   log_set_size_ = 0;
-  // copy NotificationID
-  for (auto &nid : nid_set_) nid_buffer.emplace_back(nid);
-  nid_count += nid_set_.size();
+}
+
+void LogBuffer::pass_nid(std::vector<NotificationId> &nid_buffer,
+                         NidStats &stats, std::uint64_t deq_time) {
+  std::uint64_t t = rdtscp();
+  for (auto &nid : nid_set_) {
+    stats.txn_latency_ += nid.t_mid_ - nid.tx_start_;
+    stats.log_queue_latency_ += deq_time - nid.t_mid_;
+    nid.t_mid_ = t;
+    // copy NotificationID
+    nid_buffer.emplace_back(nid);
+  }
+  std::size_t n = nid_set_.size();
+  stats.write_latency_ += (t - deq_time) * n;
+  stats.count_ += n;
+  // clear nid_set_
   nid_set_.clear();
   // init epoch
   min_epoch_ = ~(uint64_t)0;
   max_epoch_ = 0;
+}
+
+void LogBuffer::return_buffer() {
   pool_.return_buffer(this);
 }
 

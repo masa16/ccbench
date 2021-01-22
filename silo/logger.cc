@@ -86,9 +86,13 @@ void Logger::logging(bool quit) {
   Tidword tid;
   tid.obj_ = min_ctid;
   if (tid.epoch == 0 || min_ctid == ~(uint64_t)0) return;
+
   // min_epoch
   std::uint64_t min_epoch = queue_.min_epoch();
   if (min_epoch > tid.epoch) min_epoch = tid.epoch;
+  // compare with durable epoch
+  std::uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
+  depoch_diff_.sample(min_epoch - d);
 
   // write log
   std::uint64_t max_epoch = 0;
@@ -96,9 +100,12 @@ void Logger::logging(bool quit) {
   if (write_start_==0) write_start_ = t;
   for (size_t i=0; i<q_size; ++i) {
     auto log_buffer = queue_.deq();
+    std::uint64_t deq_time = rdtscp();
     if (log_buffer->max_epoch_ > max_epoch)
       max_epoch = log_buffer->max_epoch_;
-    log_buffer->write(logfile_, nid_buffer_, nid_count_, byte_count_);
+    log_buffer->write(logfile_, byte_count_);
+    log_buffer->pass_nid(nid_buffer_, nid_stats_, deq_time);
+    log_buffer->return_buffer();
   }
 #ifdef Linux
   logfile_.fdatasync();
@@ -183,8 +190,6 @@ void Logger::show_result() {
   static std::mutex mtx;
   std::lock_guard<std::mutex> lock(mtx);
   cout << "Logger#"<<thid_
-       <<": max_buffers=" << max_buffers_
-       <<" nid_count=" << nid_count_
        <<" byte_count[B]=" << byte_count_
        <<" write_latency[s]=" << write_latency_/cps
        <<" throughput[B/s]=" << byte_count_/(write_latency_/cps)

@@ -43,6 +43,7 @@ void Notifier::add_logger(Logger *logger) {
 }
 
 void Notifier::make_durable(bool quit) {
+  __atomic_fetch_add(&try_count_, 1, __ATOMIC_ACQ_REL);
   // calculate min(d_l)
   uint64_t min_dl = __atomic_load_n(&(ThLocalDurableEpoch[0].obj_), __ATOMIC_ACQUIRE);
   for (unsigned int i=1; i < FLAGS_logger_num; ++i) {
@@ -52,6 +53,15 @@ void Notifier::make_durable(bool quit) {
     }
   }
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
+  /*
+  std::vector<uint64_t> v;
+  v.emplace_back(d);
+  for (int i=0; i<FLAGS_logger_num; ++i) {
+    uint64_t x = __atomic_load_n(&(ThLocalDurableEpoch[i].obj_), __ATOMIC_ACQUIRE);
+    v.emplace_back(x);
+  }
+  epoch_log_.emplace_back(v);
+  */
   if (d >= min_dl && !quit) {
 #if NOTIFIER_THREAD
     cv_enq_.notify_one();
@@ -65,29 +75,19 @@ void Notifier::make_durable(bool quit) {
   asm volatile("":: : "memory");
   // Durable Latency
   uint64_t epoch = (quit) ? (~(uint64_t)0) : min_dl;
-  uint64_t latency = 0;
-  uint64_t min_latency = ~(uint64_t)0;
-  uint64_t max_latency = 0;
-  size_t count = 0;
+  NotifyStats stats;
   // notify client
-  buffer_.notify(epoch, latency, min_latency, max_latency, count);
+  buffer_.notify(epoch, stats);
 #if NOTIFIER_THREAD
   cv_enq_.notify_one();
 #endif
-  if (count > 0) {
-#if NOTIFIER_THREAD
-    latency_ += latency;
-    count_ += count;
-#else
-    asm volatile("":: : "memory");
-    __atomic_fetch_add(&latency_, latency, __ATOMIC_ACQ_REL);
-    __atomic_fetch_add(&count_, count, __ATOMIC_ACQ_REL);
-    asm volatile("":: : "memory");
-#endif
+  if (stats.count_ > 0) {
+    notify_stats_.add(stats);
     uint64_t t = rdtscp();
     latency_log_.emplace_back(
       std::array<std::uint64_t,6>{
-        min_dl, t-start_clock_, count, latency/count, min_latency, max_latency,
+        min_dl, t-start_clock_, stats.count_, stats.latency_/stats.count_,
+          stats.min_latency_, stats.max_latency_,
       });
   }
 }
@@ -104,7 +104,7 @@ void Notifier::worker() {
 
 void set_cpu(std::thread &th, int cpu);
 
-  void Notifier::run() {
+void Notifier::run() {
 #if NOTIFIER_THREAD
   thread_ = std::thread([this]{worker();});
   if (FLAGS_notifier_cpu >= 0) {
@@ -113,30 +113,36 @@ void set_cpu(std::thread &th, int cpu);
 #endif
 }
 
-
-void NidBuffer::notify(std::uint64_t min_dl, std::uint64_t &latency,
-                       std::uint64_t &min_latency, std::uint64_t &max_latency,
-                       std::size_t &count) {
+void NidBuffer::notify(std::uint64_t min_dl, NotifyStats &stats) {
   if (front_ == NULL) return;
+  stats.notify_count_ ++;
   NidBufferItem *orig_front = front_;
-  int empty_count = 0;
-  uint64_t ltc = 0;
-  uint64_t min_ltc = ~(uint64_t)0;
-  uint64_t max_ltc = 0;
   while (front_->epoch_ <= min_dl) {
-    uint64_t t = rdtscp();
+    //printf("front_->epoch_=%lu min_dl=%lu\n",front_->epoch_,min_dl);
+    std::uint64_t ltc = 0;
+    std::uint64_t ntf_ltc = 0;
+    std::uint64_t min_ltc = ~(uint64_t)0;
+    std::uint64_t max_ltc = 0;
+    std::uint64_t t = rdtscp();
     for (auto &nid : front_->buffer_) {
       // notify client here
       std::uint64_t dt = t - nid.tx_start_;
       ltc += dt;
       if (dt < min_ltc) min_ltc = dt;
       if (dt > max_ltc) max_ltc = dt;
+      ntf_ltc += t - nid.t_mid_;
     }
-    latency += ltc;
-    if (min_ltc < min_latency) min_latency = min_ltc;
-    if (max_ltc > max_latency) max_latency = max_ltc;
-    count += front_->buffer_.size();
-    size_ -= front_->buffer_.size();
+    stats.latency_ += ltc;
+    stats.notify_latency_ += ntf_ltc;
+    if (min_ltc < stats.min_latency_) stats.min_latency_ = min_ltc;
+    if (max_ltc > stats.max_latency_) stats.max_latency_ = max_ltc;
+    if (min_dl != ~(uint64_t)0)
+      stats.epoch_diff_ += min_dl - front_->epoch_;
+    stats.epoch_count_ ++;
+    std::size_t n = front_->buffer_.size();
+    stats.count_ += n;
+    // clear buffer
+    size_ -= n;
     front_->buffer_.clear();
     if (front_->next_ == NULL) break;
     //if (end_->epoch_ > max_epoch_+4) {
@@ -207,13 +213,13 @@ void Notifier::join() {
 
 void Notifier::logger_end(Logger *logger) {
   std::unique_lock<std::mutex> lock(mutex_);
-  max_buffers_ += logger->max_buffers_;
-  nid_count_ += logger->nid_count_;
+  nid_stats_.add(logger->nid_stats_);
   byte_count_ += logger->byte_count_;
   write_count_ += logger->write_count_;
   buffer_count_ += logger->buffer_count_;
   write_latency_ += logger->write_latency_;
   wait_latency_ += logger->wait_latency_;
+  depoch_diff_.unify(logger->depoch_diff_);
   throughput_ += (double)logger->byte_count_/logger->write_latency_;
   if (write_start_ > logger->write_start_) write_start_ = logger->write_start_;
   if (write_end_ < logger->write_end_) write_end_ = logger->write_end_;
@@ -230,28 +236,37 @@ void Notifier::logger_end(Logger *logger) {
 void Notifier::display() {
   double cps = FLAGS_clocks_per_us*1e6;
   size_t n = FLAGS_logger_num;
-  std::cout<<"mean_max_buffers:\t" << max_buffers_/n << endl;
-  std::cout<<"nid_count:\t" << nid_count_<< endl;
   std::cout<<"wait_time[s]:\t" << wait_latency_/cps << endl;
   std::cout<<"write_time[s]:\t" << write_latency_/cps << endl;
   std::cout<<"write_count:\t" << write_count_<< endl;
   std::cout<<"byte_count[B]:\t" << byte_count_<< endl;
   std::cout<<"buffer_count:\t" << buffer_count_<< endl;
+  depoch_diff_.display("depoch_diff");
   std::cout<<"throughput(thread_sum)[B/s]:\t" << throughput_*cps << endl;
   std::cout<<"throughput(byte_sum)[B/s]:\t" << cps*byte_count_/write_latency_*n << endl;
   std::cout<<"throughput(elap)[B/s]:\t" << cps*byte_count_/(write_end_-write_start_) << endl;
-  double t = (double)latency_ / FLAGS_clocks_per_us / count_ / 1000;
-  std::cout << std::fixed << std::setprecision(4)
-            << "durable_latency[ms]:\t" << t << endl;
-  std::cout << "durable_count:\t" << count_ << endl;
+  nid_stats_.display();
+  notify_stats_.display();
+  std::cout << "try_count:\t" << try_count_ << endl;
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
   std::cout << "durable_epoch:\t" << d << endl;
-  //std::cout << "buffer_.size():\t\t" << buffer_.size() << endl;
   std::ofstream o("latency.dat");
   o << "epoch,time,count,mean_latency,min_latency,max_latency" << std::endl;
   for (auto x : latency_log_) {
     o << x[0] << "," << x[1]/cps << "," << x[2] << "," << x[3]/cps << "," << x[4]/cps<< "," << x[5]/cps <<std::endl;
   }
   o.close();
+  /*
+  std::ofstream q("epoch.dat");
+  for (auto v : epoch_log_) {
+    auto itr = v.begin();
+    q << *itr;
+    while (++itr != v.end()) {
+      q << "," << *itr;
+    }
+    q << std::endl;
+  }
+  q.close();
+  */
 }
 #endif

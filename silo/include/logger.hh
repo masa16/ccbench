@@ -93,8 +93,7 @@ public:
   std::uint64_t rotate_epoch_ = 100;
   Notifier &notifier_;
   std::unordered_map<int, LogBufferPool*> log_buffer_pool_map_;
-  std::size_t max_buffers_ = 0;
-  std::size_t nid_count_ = 0;
+  NidStats nid_stats_;
   std::size_t byte_count_ = 0;
   std::size_t write_count_ = 0;
   std::size_t buffer_count_ = 0;
@@ -102,6 +101,7 @@ public:
   std::uint64_t write_latency_ = 0;
   std::uint64_t write_start_ = 0;
   std::uint64_t write_end_ = 0;
+  Stats depoch_diff_;
 
   Logger(int i, Notifier &n) : thid_(i), notifier_(n) {}
 

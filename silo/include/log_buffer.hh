@@ -16,6 +16,7 @@
 class LogQueue;
 class NotificationId;
 class Notifier;
+class NidStats;
 class LogBufferPool;
 
 class LogBuffer {
@@ -31,8 +32,10 @@ public:
   void push(std::uint64_t tid, NotificationId &nid,
             std::vector<WriteElement<Tuple>> &write_set,
             char *val, bool new_epoch_begins);
-  void write(File &logfile, std::vector<NotificationId> &nid_buffer,
-             size_t &nid_count, size_t &byte_count);
+  void write(File &logfile, size_t &byte_count);
+  void pass_nid(std::vector<NotificationId> &nid_buffer,
+                NidStats &nid_stats, std::uint64_t deq_time);
+  void return_buffer();
   bool empty();
 
   LogBuffer(LogBufferPool &pool) : pool_(pool) {

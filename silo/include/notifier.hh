@@ -6,12 +6,14 @@
 #include <mutex>
 #include <condition_variable>
 #include "../include/common.hh"
+#include "stats.hh"
 
 class NotificationId {
 public:
   uint32_t id_;
   uint32_t thread_id_;
   uint64_t tx_start_;
+  uint64_t t_mid_;
   uint64_t tid_;
 
   NotificationId(uint32_t id, uint32_t thread_id, uint64_t tx_start) :
@@ -26,6 +28,7 @@ public:
   }
 };
 
+
 class PepochFile {
 private:
   std::string file_name_ = "pepoch";
@@ -37,6 +40,7 @@ public:
   void close();
   ~PepochFile() { if (fd_ != -1) close(); }
 };
+
 
 class Logger;
 
@@ -50,6 +54,7 @@ class NidBufferItem {
   }
 };
 
+
 class NidBuffer {
 private:
   std::size_t size_ = 0;
@@ -61,12 +66,11 @@ public:
     front_ = end_ = new NidBufferItem(0);
   }
   void store(std::vector<NotificationId> &nid_buffer);
-  void notify(std::uint64_t min_dl, std::uint64_t &latency,
-              std::uint64_t &min_latency, std::uint64_t &max_latency,
-              std::size_t &count);
+  void notify(std::uint64_t min_dl, NotifyStats &stats);
   std::size_t size() {return size_;}
   bool empty() {return size_ == 0;}
 };
+
 
 class Notifier {
 private:
@@ -77,11 +81,8 @@ private:
   std::condition_variable cv_finish_;
   NidBuffer buffer_;
   std::size_t capa_ = 100000000;
-  std::size_t count_ = 0;
-  std::size_t latency_ = 0;
   std::size_t push_size_ = 0;
   std::size_t max_buffers_ = 0;
-  std::size_t nid_count_ = 0;
   std::size_t byte_count_ = 0;
   std::size_t write_count_ = 0;
   std::size_t buffer_count_ = 0;
@@ -89,12 +90,17 @@ private:
   std::uint64_t write_latency_ = 0;
   std::uint64_t write_start_ = ~(uint64_t)0;
   std::uint64_t write_end_ = 0;
+  std::size_t try_count_ = 0;
   double throughput_ = 0;
   std::uint64_t start_clock_;
   std::vector<std::array<std::uint64_t,6>> latency_log_;
+  std::vector<std::vector<std::uint64_t>> epoch_log_;
   bool quit_ = false;
   bool joined_ = false;
   std::unordered_set<Logger*> logger_set_;
+  Stats depoch_diff_;
+  NidStats nid_stats_;
+  NotifyStats notify_stats_;
 
 public:
   PepochFile pepoch_file_;
