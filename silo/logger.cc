@@ -66,8 +66,7 @@ void Logger::add_txn_executor(TxnExecutor &trans) {
 }
 
 void Logger::logging(bool quit) {
-  size_t q_size = queue_.size();
-  if (q_size == 0) {
+  if (queue_.empty()) {
     if (quit)
       notifier_.push(nid_buffer_, quit);
     return;
@@ -98,8 +97,9 @@ void Logger::logging(bool quit) {
   std::uint64_t max_epoch = 0;
   std::uint64_t t = rdtscp();
   if (write_start_==0) write_start_ = t;
-  for (size_t i=0; i<q_size; ++i) {
-    auto log_buffer = queue_.deq();
+  std::vector<LogBuffer*> *log_buffer_vec = queue_.deq();
+  size_t q_size = log_buffer_vec->size();
+  for (LogBuffer *log_buffer : *log_buffer_vec) {
     std::uint64_t deq_time = rdtscp();
     if (log_buffer->max_epoch_ > max_epoch)
       max_epoch = log_buffer->max_epoch_;
@@ -107,6 +107,7 @@ void Logger::logging(bool quit) {
     log_buffer->pass_nid(nid_buffer_, nid_stats_, deq_time);
     log_buffer->return_buffer();
   }
+  delete log_buffer_vec;
 #ifdef Linux
   logfile_.fdatasync();
 #else

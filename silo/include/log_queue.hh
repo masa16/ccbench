@@ -12,7 +12,7 @@ private:
   std::mutex mutex_;
   std::condition_variable cv_enq_;
   std::condition_variable cv_deq_;
-  std::multimap<uint64_t,LogBuffer*> queue_;
+  std::map<uint64_t,std::vector<LogBuffer*>*> queue_;
   std::size_t capacity_ = 1000;
   bool quit_ = false;
 
@@ -33,7 +33,16 @@ public:
 
   void enq(LogBuffer* x) {
     my_lock();
-    queue_.emplace(x->min_epoch_, x);
+    std::vector<LogBuffer*> *v;
+    uint64_t e = x->min_epoch_;
+    auto it = queue_.find(e);
+    if (it == queue_.end()) {
+      v = new std::vector<LogBuffer*>;
+      queue_.emplace(e,v);
+    } else {
+      v = it->second;
+    }
+    v->emplace_back(x);
     cv_deq_.notify_one();
     my_unlock();
   }
@@ -44,7 +53,7 @@ public:
     return !(quit_ && queue_.empty());
   }
 
-  LogBuffer *deq() {
+  std::vector<LogBuffer*> *deq() {
     my_lock();
     auto itr = queue_.cbegin();
     auto ret = itr->second;
