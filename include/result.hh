@@ -43,6 +43,7 @@ public:
 #if DURABLE_EPOCH
   uint64_t local_bkpr_latency_ = 0;
   uint64_t local_txn_latency_ = 0;
+  uint64_t local_wait_depoch_latency_ = 0;
   uint64_t local_publish_latency_ = 0;
   uint64_t local_publish_counts_ = 0;
 #endif
@@ -84,6 +85,7 @@ public:
 #if DURABLE_EPOCH
   uint64_t total_bkpr_latency_ = 0;
   uint64_t total_txn_latency_ = 0;
+  uint64_t total_wait_depoch_latency_ = 0;
   uint64_t total_publish_latency_ = 0;
   uint64_t total_publish_counts_ = 0;
 #endif
@@ -139,7 +141,8 @@ public:
 
 #endif
 #if DURABLE_EPOCH
-  void displayBackPressureLatencyRate();
+  void displayBackPressureLatencyRate(size_t clocks_per_us);
+  void displayWaitDEpochLatency(size_t clocks_per_us);
   void displayPublishLatency(size_t clocks_per_us);
 #endif
 
@@ -182,6 +185,7 @@ public:
 #if DURABLE_EPOCH
   void addLocalBkprLatency(const uint64_t count);
   void addLocalTxnLatency(const uint64_t count);
+  void addLocalWaitDEpochLatency(const uint64_t count);
   void addLocalPublishLatency(const uint64_t count);
   void addLocalPublishCounts(const uint64_t count);
 #endif
