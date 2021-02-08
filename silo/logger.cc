@@ -97,9 +97,9 @@ void Logger::logging(bool quit) {
   std::uint64_t max_epoch = 0;
   std::uint64_t t = rdtscp();
   if (write_start_==0) write_start_ = t;
-  std::vector<LogBuffer*> *log_buffer_vec = queue_.deq();
-  size_t q_size = log_buffer_vec->size();
-  for (LogBuffer *log_buffer : *log_buffer_vec) {
+  std::vector<LogBuffer*> log_buffer_vec = queue_.deq();
+  size_t buffer_num = log_buffer_vec.size();
+  for (LogBuffer *log_buffer : log_buffer_vec) {
     std::uint64_t deq_time = rdtscp();
     if (log_buffer->max_epoch_ > max_epoch)
       max_epoch = log_buffer->max_epoch_;
@@ -107,7 +107,6 @@ void Logger::logging(bool quit) {
     log_buffer->pass_nid(nid_buffer_, nid_stats_, deq_time);
     log_buffer->return_buffer();
   }
-  delete log_buffer_vec;
 #ifdef Linux
   logfile_.fdatasync();
 #else
@@ -117,7 +116,7 @@ void Logger::logging(bool quit) {
   write_end_ = rdtscp();
   write_latency_ += write_end_ - t;
   write_count_++;
-  buffer_count_ += q_size;
+  buffer_count_ += buffer_num;
 
   // publish Durable Epoch of this thread
   auto new_dl = min_epoch - 1;
@@ -130,6 +129,32 @@ void Logger::logging(bool quit) {
     if (max_epoch >= rotate_epoch_)
       rotate_logfile(max_epoch);
     notifier_.push(nid_buffer_, quit);
+  }
+}
+
+void Logger::wait_deq() {
+  while (!queue_.wait_deq()) {
+    usleep(5);
+    // calculate min(ctid_w)
+    uint64_t min_ctid = ~(uint64_t)0;
+    for (auto itr : thid_vec_) {
+      auto ctid = __atomic_load_n(&(CTIDW[itr].obj_), __ATOMIC_ACQUIRE);
+      if (ctid > 0 && ctid < min_ctid) {
+        min_ctid = ctid;
+      }
+    }
+    // min_epoch
+    Tidword tid;
+    tid.obj_ = min_ctid;
+    if (tid.epoch == 0 || min_ctid == ~(uint64_t)0) continue;
+    auto new_dl = tid.epoch - 1;
+    auto old_dl = __atomic_load_n(&(ThLocalDurableEpoch[thid_].obj_), __ATOMIC_ACQUIRE);
+    if (new_dl > old_dl) {
+      asm volatile("":: : "memory");
+      __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
+      asm volatile("":: : "memory");
+      notifier_.temp_durable();
+    }
   }
 }
 
@@ -147,7 +172,8 @@ void Logger::worker() {
 
   for (;;) {
     std::uint64_t t = rdtscp();
-    if (!queue_.wait_deq()) break;
+    wait_deq();
+    if (queue_.quit()) break;
     wait_latency_ += rdtscp() - t;
     logging(false);
   }

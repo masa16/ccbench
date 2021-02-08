@@ -476,3 +476,19 @@ void TxnExecutor::writePhase() {
   read_set_.clear();
   write_set_.clear();
 }
+
+#if DURABLE_EPOCH && MAX_EPOCH_DIFF > 0
+void TxnExecutor::stopForDurableEpoch(const bool &quit) {
+  // pause this worker until Durable epoch catches up
+  std::uint64_t t = rdtscp();
+  if (ThLocalEpoch[thid_].obj_ > loadAcquire(DurableEpoch.obj_) + MAX_EPOCH_DIFF) {
+    log_buffer_pool_.publish();
+    for (;;) {
+      if (ThLocalEpoch[thid_].obj_ <= loadAcquire(DurableEpoch.obj_) + MAX_EPOCH_DIFF) break;
+      if (loadAcquire(quit)) break;
+      usleep(5);
+    }
+  }
+  sres_->local_wait_depoch_latency_ += rdtscp() - t;
+}
+#endif

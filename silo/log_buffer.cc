@@ -32,7 +32,7 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
   }
   auto t = rdtscp();
   pool_.txn_latency_ += t - nid.tx_start_;
-  //pool_.bkpr_latency_ += t - nid.tx_end_;
+  pool_.bkpr_latency_ += t - nid.t_mid_;
 }
 
 static std::mutex smutex;
@@ -51,10 +51,12 @@ void LogBufferPool::publish() {
     }
   }
   // take buffer from pool
-  std::unique_lock<std::mutex> lock(mutex_);
-  cv_deq_.wait(lock, [this]{return quit_ || !pool_.empty();});
-  current_buffer_ = pool_.back();
-  pool_.pop_back();
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    cv_deq_.wait(lock, [this]{return quit_ || !pool_.empty();});
+    current_buffer_ = pool_.back();
+    pool_.pop_back();
+  }
   publish_latency_ += rdtscp() - t;
   publish_counts_++;
 }

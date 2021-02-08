@@ -156,6 +156,10 @@ RETRY:
       ++myres.local_abort_counts_;
       goto RETRY;
     }
+
+#if DURABLE_EPOCH && MAX_EPOCH_DIFF > 0
+    trans.stopForDurableEpoch(quit);
+#endif
   }
 
 #if DURABLE_EPOCH

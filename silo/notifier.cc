@@ -202,6 +202,11 @@ void Notifier::push(std::vector<NotificationId> &nid_buffer, bool quit) {
 }
 #endif
 
+void Notifier::temp_durable() {
+  std::unique_lock<std::mutex> lock(mutex_);
+  make_durable(false);
+}
+
 void Notifier::join() {
 #if NOTIFIER_THREAD
   thread_.join();

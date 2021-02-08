@@ -125,4 +125,6 @@ public:
   void write(std::uint64_t key, std::string_view val = "");
 
   void writePhase();
+
+  void stopForDurableEpoch(const bool &quit);
 };

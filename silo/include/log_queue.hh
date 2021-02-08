@@ -9,12 +9,11 @@ class LogBuffer;
 class LogQueue {
 private:
   std::atomic<unsigned int> my_mutex_;
-  std::mutex mutex_;
-  std::condition_variable cv_enq_;
-  std::condition_variable cv_deq_;
-  std::map<uint64_t,std::vector<LogBuffer*>*> queue_;
+  //std::mutex mutex_;
+  //std::condition_variable cv_deq_;
+  std::map<uint64_t,std::vector<LogBuffer*>> queue_;
   std::size_t capacity_ = 1000;
-  bool quit_ = false;
+  std::atomic<bool> quit_;
 
 private:
   void my_lock() {
@@ -29,35 +28,46 @@ private:
   }
 
 public:
-  LogQueue() {my_mutex_.store(0);}
+  LogQueue() {
+    my_mutex_.store(0);
+    quit_.store(false);
+  }
 
   void enq(LogBuffer* x) {
     my_lock();
-    std::vector<LogBuffer*> *v;
-    uint64_t e = x->min_epoch_;
-    auto it = queue_.find(e);
-    if (it == queue_.end()) {
-      v = new std::vector<LogBuffer*>;
-      queue_.emplace(e,v);
-    } else {
-      v = it->second;
-    }
-    v->emplace_back(x);
-    cv_deq_.notify_one();
+    std::vector<LogBuffer*> &v = queue_[x->min_epoch_];
+    v.emplace_back(x);
+    //cv_deq_.notify_one();
     my_unlock();
   }
 
   bool wait_deq() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    cv_deq_.wait(lock, [this]{return quit_ || !queue_.empty();});
-    return !(quit_ && queue_.empty());
+    //std::unique_lock<std::mutex> lock(mutex_);
+    //return cv_deq_.wait_for(lock, std::chrono::microseconds(100),
+    //                        [this]{return quit_ || !queue_.empty();});
+    return quit_.load() || !queue_.empty();
   }
 
-  std::vector<LogBuffer*> *deq() {
+  bool quit() {
+    return quit_.load() && queue_.empty();
+  }
+
+  std::vector<LogBuffer*> deq() {
     my_lock();
+#if DEQUEUE_MIN_EPOCH
     auto itr = queue_.cbegin();
     auto ret = itr->second;
     queue_.erase(itr);
+#else
+    std::vector<LogBuffer*> ret;
+    ret.reserve(queue_.size());
+    while (!queue_.empty()) {
+      auto itr = queue_.cbegin();
+      auto &v = itr->second;
+      std::copy(v.begin(),v.end(),std::back_inserter(ret));
+      queue_.erase(itr);
+    }
+#endif
     my_unlock();
     return ret;
   }
@@ -75,8 +85,8 @@ public:
   }
 
   void terminate() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    quit_ = true;
-    cv_deq_.notify_all();
+    //std::lock_guard<std::mutex> lock(mutex_);
+    quit_.store(true);
+    //cv_deq_.notify_all();
   }
 };

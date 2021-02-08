@@ -112,6 +112,7 @@ public:
   }
   void add_logger(Logger *logger);
   void make_durable(bool quit);
+  void temp_durable();
   void worker();
   void run();
   void push(std::vector<NotificationId> &nid_buffer, bool quit);
