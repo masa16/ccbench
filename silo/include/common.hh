@@ -31,7 +31,7 @@ alignas(CACHE_LINE_SIZE) GLOBAL MasstreeWrapper<Tuple> MT;
 #ifdef GLOBAL_VALUE_DEFINE
 DEFINE_uint64(clocks_per_us, 2100,
               "CPU_MHz. Use this info for measuring time.");
-DEFINE_uint64(epoch_time, 40, "Epoch interval[msec].");
+DEFINE_double(epoch_time, 40, "Epoch interval[msec].");
 DEFINE_uint64(extime, 3, "Execution time[sec].");
 DEFINE_uint64(max_ope, 10,
               "Total number of operations per single transaction.");
@@ -50,7 +50,7 @@ DEFINE_bool(ycsb, true,
 DEFINE_double(zipf_skew, 0, "zipf skew. 0 ~ 0.999...");
 #else
 DECLARE_uint64(clocks_per_us);
-DECLARE_uint64(epoch_time);
+DECLARE_double(epoch_time);
 DECLARE_uint64(extime);
 DECLARE_uint64(max_ope);
 DECLARE_bool(rmw);
