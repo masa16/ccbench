@@ -134,7 +134,6 @@ void Logger::logging(bool quit) {
 
 void Logger::wait_deq() {
   while (!queue_.wait_deq()) {
-    usleep(5);
     // calculate min(ctid_w)
     uint64_t min_ctid = ~(uint64_t)0;
     for (auto itr : thid_vec_) {

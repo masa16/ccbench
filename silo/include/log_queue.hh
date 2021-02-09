@@ -9,11 +9,12 @@ class LogBuffer;
 class LogQueue {
 private:
   std::atomic<unsigned int> my_mutex_;
-  //std::mutex mutex_;
-  //std::condition_variable cv_deq_;
+  std::mutex mutex_;
+  std::condition_variable cv_deq_;
   std::map<uint64_t,std::vector<LogBuffer*>> queue_;
   std::size_t capacity_ = 1000;
   std::atomic<bool> quit_;
+  std::chrono::microseconds timeout;
 
 private:
   void my_lock() {
@@ -31,21 +32,21 @@ public:
   LogQueue() {
     my_mutex_.store(0);
     quit_.store(false);
+    timeout = std::chrono::microseconds((int)(FLAGS_epoch_time*1000));
   }
 
   void enq(LogBuffer* x) {
     my_lock();
     std::vector<LogBuffer*> &v = queue_[x->min_epoch_];
     v.emplace_back(x);
-    //cv_deq_.notify_one();
+    cv_deq_.notify_one();
     my_unlock();
   }
 
   bool wait_deq() {
-    //std::unique_lock<std::mutex> lock(mutex_);
-    //return cv_deq_.wait_for(lock, std::chrono::microseconds(100),
-    //                        [this]{return quit_ || !queue_.empty();});
-    return quit_.load() || !queue_.empty();
+    std::unique_lock<std::mutex> lock(mutex_);
+    return cv_deq_.wait_for(lock, timeout,
+                            [this]{return quit_.load() || !queue_.empty();});
   }
 
   bool quit() {
@@ -85,8 +86,6 @@ public:
   }
 
   void terminate() {
-    //std::lock_guard<std::mutex> lock(mutex_);
     quit_.store(true);
-    //cv_deq_.notify_all();
   }
 };
