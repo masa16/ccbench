@@ -48,7 +48,7 @@ public:
 #if NOTIFIER_THREAD
     latency_        += other.latency_;
     notify_latency_ += other.notify_latency_;
-    nid_count_      += other.nid_count_;
+    count_          += other.count_;
     notify_count_   += other.notify_count_;
     epoch_count_    += other.epoch_count_;
     epoch_diff_     += other.epoch_diff_;
@@ -70,7 +70,7 @@ public:
               << "durable_latency[ms]:\t" << latency_/cpms/count_ << endl;
     std::cout << "notify_count:\t" << notify_count_ << endl;
     std::cout << "durable_count:\t" << count_ << endl;
-    std::cout << "mean_durable_count:\t" << count_ / notify_count_ << endl;
+    std::cout << "mean_durable_count:\t" << (double)count_/notify_count_ << endl;
     std::cout << std::fixed << std::setprecision(2)
               << "mean_epoch_diff:\t" << (double)epoch_diff_/epoch_count_ << endl;
   }
