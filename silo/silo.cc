@@ -43,9 +43,8 @@ using namespace std;
 uint *GlobalLSN;
 
 #if DURABLE_EPOCH
-void worker(size_t thid, char &ready, const bool &start, const bool &quit, Logger **logp)
+void worker(size_t thid, char &ready, const bool &start, const bool &quit, std::atomic<Logger*> *logp)
 {
-  std::this_thread::sleep_for(std::chrono::milliseconds(20));
 #if 0
   if (!FLAGS_affinity.empty()) {
     std::cout << "Worker #" << thid << ": on CPU " << sched_getcpu() << "\n";
@@ -95,7 +94,12 @@ void worker(size_t thid, char &ready, const bool &start, const bool &quit)
 #endif
 
 #if DURABLE_EPOCH
-  Logger* logger = *logp;
+  Logger* logger;
+  for (;;) {
+    logger = logp->load();
+    if (logger != 0) break;
+    std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+  }
   logger->add_txn_executor(trans);
 #endif
 
@@ -170,8 +174,7 @@ RETRY:
 }
 
 #if DURABLE_EPOCH
-void logger_th(int thid, Notifier &notifier, Logger** logp){
-  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+void logger_th(int thid, Notifier &notifier, std::atomic<Logger*> *logp){
 #if 0
   if (!FLAGS_affinity.empty()) {
     std::cout << "Logger #" << thid << ": on CPU " << sched_getcpu() << "\n";
@@ -179,7 +182,7 @@ void logger_th(int thid, Notifier &notifier, Logger** logp){
 #endif
   alignas(CACHE_LINE_SIZE) Logger logger(thid, notifier);
   notifier.add_logger(&logger);
-  *logp = &logger;
+  logp->store(&logger);
   logger.worker();
 }
 
@@ -223,13 +226,14 @@ int main(int argc, char *argv[]) try {
 	if (!GlobalLSN) ERR;
 #endif
 #if DURABLE_EPOCH
-  Logger *logs[FLAGS_logger_num];
+  std::atomic<Logger *> logs[FLAGS_logger_num];
   Notifier notifier;
   std::vector<std::thread> lthv;
 
   int i=0, j=0;
   for (auto itr = affin.nodes_.begin(); itr != affin.nodes_.end(); ++itr,++j) {
     int lcpu = itr->logger_cpu_;
+    logs[j].store(0);
     lthv.emplace_back(logger_th, j, std::ref(notifier), &(logs[j]));
     if (!FLAGS_affinity.empty()) {
       set_cpu(lthv.back(), lcpu);
