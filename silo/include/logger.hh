@@ -90,7 +90,6 @@ public:
   std::string logpath_;
   std::uint64_t rotate_epoch_ = 100;
   Notifier &notifier_;
-  std::unordered_map<int, LogBufferPool*> log_buffer_pool_map_;
   NidStats nid_stats_;
   std::size_t byte_count_ = 0;
   std::size_t write_count_ = 0;

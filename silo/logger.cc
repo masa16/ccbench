@@ -60,7 +60,6 @@ void Logger::add_txn_executor(TxnExecutor &trans) {
   LogBufferPool &pool = std::ref(trans.log_buffer_pool_);
   pool.queue_ = &queue_;
   std::lock_guard<std::mutex> lock(mutex_);
-  log_buffer_pool_map_[trans.thid_] = &pool;
   thid_vec_.emplace_back(trans.thid_);
   thid_set_.emplace(trans.thid_);
 }
