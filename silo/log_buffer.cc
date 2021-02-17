@@ -103,9 +103,9 @@ void LogBuffer::pass_nid(std::vector<NotificationId> &nid_buffer,
     stats.txn_latency_ += nid.t_mid_ - nid.tx_start_;
     stats.log_queue_latency_ += deq_time - nid.t_mid_;
     nid.t_mid_ = t;
-    // copy NotificationID
-    nid_buffer.emplace_back(nid);
   }
+  // copy NotificationID
+  std::copy(nid_set_.begin(), nid_set_.end(), std::back_inserter(nid_buffer));
   std::size_t n = nid_set_.size();
   stats.write_latency_ += (t - deq_time) * n;
   stats.count_ += n;
