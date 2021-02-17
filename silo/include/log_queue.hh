@@ -39,11 +39,12 @@ public:
     my_lock();
     std::vector<LogBuffer*> &v = queue_[x->min_epoch_];
     v.emplace_back(x);
-    cv_deq_.notify_one();
     my_unlock();
+    cv_deq_.notify_one();
   }
 
   bool wait_deq() {
+    if (quit_.load() || !queue_.empty()) return true;
     std::unique_lock<std::mutex> lock(mutex_);
     return cv_deq_.wait_for(lock, timeout,
                             [this]{return quit_.load() || !queue_.empty();});
