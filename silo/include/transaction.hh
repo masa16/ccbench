@@ -58,6 +58,7 @@ public:
   LogBufferPool log_buffer_pool_;
   NotificationId nid_;
   std::uint32_t nid_counter_ = 0; // Notification ID
+  int logger_thid_;
 #endif
 
   TxnExecutor(int thid, Result *sres);

@@ -481,10 +481,14 @@ void TxnExecutor::writePhase() {
 void TxnExecutor::stopForDurableEpoch(const bool &quit) {
   // pause this worker until Durable epoch catches up
   std::uint64_t t = rdtscp();
-  if (ThLocalEpoch[thid_].obj_ > loadAcquire(DurableEpoch.obj_) + MAX_EPOCH_DIFF) {
+  //auto epoch = loadAcquire(DurableEpoch.obj_);
+  auto epoch = loadAcquire(ThLocalDurableEpoch[logger_thid_].obj_);
+  if (ThLocalEpoch[thid_].obj_ > epoch + MAX_EPOCH_DIFF) {
     log_buffer_pool_.publish();
     for (;;) {
-      if (ThLocalEpoch[thid_].obj_ <= loadAcquire(DurableEpoch.obj_) + MAX_EPOCH_DIFF) break;
+      //auto epoch = loadAcquire(DurableEpoch.obj_);
+      auto epoch = loadAcquire(ThLocalDurableEpoch[logger_thid_].obj_);
+      if (ThLocalEpoch[thid_].obj_ <= epoch + MAX_EPOCH_DIFF) break;
       if (loadAcquire(quit)) break;
       usleep(5);
     }

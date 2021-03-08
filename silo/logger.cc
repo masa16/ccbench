@@ -57,6 +57,7 @@ void LoggerAffinity::init(unsigned worker_num, unsigned logger_num) {
 }
 
 void Logger::add_txn_executor(TxnExecutor &trans) {
+  trans.logger_thid_ = thid_;
   LogBufferPool &pool = std::ref(trans.log_buffer_pool_);
   pool.queue_ = &queue_;
   std::lock_guard<std::mutex> lock(mutex_);
