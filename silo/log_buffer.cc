@@ -2,6 +2,7 @@
 #include "include/log_buffer.hh"
 #include "include/log_queue.hh"
 #include "include/notifier.hh"
+#include "include/logger.hh"
 
 // no lock required since each thread has unique LogBuffer
 
@@ -96,8 +97,8 @@ void LogBuffer::write(File &logfile, size_t &byte_count) {
   log_set_size_ = 0;
 }
 
-void LogBuffer::pass_nid(std::vector<NotificationId> &nid_buffer,
-                         NidStats &stats, std::uint64_t deq_time) {
+void LogBuffer::pass_nid(NidBuffer &nid_buffer,
+                         LoggerResult &stats, std::uint64_t deq_time) {
   std::uint64_t t = rdtscp();
   for (auto &nid : nid_set_) {
     stats.txn_latency_ += nid.t_mid_ - nid.tx_start_;
@@ -105,10 +106,10 @@ void LogBuffer::pass_nid(std::vector<NotificationId> &nid_buffer,
     nid.t_mid_ = t;
   }
   // copy NotificationID
-  std::copy(nid_set_.begin(), nid_set_.end(), std::back_inserter(nid_buffer));
   std::size_t n = nid_set_.size();
+  nid_buffer.store(nid_set_, min_epoch_);
   stats.write_latency_ += (t - deq_time) * n;
-  stats.count_ += n;
+  stats.nid_count_ += n;
   // clear nid_set_
   nid_set_.clear();
   // init epoch

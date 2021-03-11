@@ -66,6 +66,41 @@ public:
 };
 
 
+class LoggerResult {
+public:
+  // Logger
+  std::size_t byte_count_ = 0;
+  std::size_t write_count_ = 0;
+  std::size_t buffer_count_ = 0;
+  std::uint64_t wait_time_ = 0;
+  std::uint64_t write_time_ = 0;
+  std::uint64_t write_start_ = ~(uint64_t)0;
+  std::uint64_t write_end_ = 0;
+  Stats depoch_diff_;
+  // Notifier
+  std::size_t try_count_ = 0;
+  double throughput_ = 0;
+  // NidStats
+  std::size_t nid_count_ = 0;
+  std::uint64_t txn_latency_ = 0;
+  std::uint64_t log_queue_latency_ = 0;
+  std::uint64_t write_latency_ = 0;
+  // NotifyStats
+  std::uint64_t latency_ = 0;
+  std::uint64_t notify_latency_ = 0;
+  std::uint64_t min_latency_ = ~(uint64_t)0;
+  std::uint64_t max_latency_ = 0;
+  std::size_t count_ = 0;
+  std::size_t notify_count_ = 0;
+  std::size_t epoch_count_ = 0;
+  std::size_t epoch_diff_ = 0;
+
+
+  void add(LoggerResult &other);
+  void display();
+};
+
+
 class Logger {
 private:
   std::mutex mutex_;
@@ -73,7 +108,7 @@ private:
   std::condition_variable cv_finish_;
   bool joined_ = false;
   std::size_t capacity_ = 1000;
-  std::vector<NotificationId> nid_buffer_;
+  NidBuffer nid_buffer_;
   unsigned int counter_=0;
 
   void logging(bool quit);
@@ -89,22 +124,19 @@ public:
   std::string logdir_;
   std::string logpath_;
   std::uint64_t rotate_epoch_ = 100;
-  Notifier &notifier_;
-  NidStats nid_stats_;
-  std::size_t byte_count_ = 0;
-  std::size_t write_count_ = 0;
-  std::size_t buffer_count_ = 0;
-  std::uint64_t wait_latency_ = 0;
-  std::uint64_t write_latency_ = 0;
-  std::uint64_t write_start_ = 0;
-  std::uint64_t write_end_ = 0;
-  Stats depoch_diff_;
+  LoggerResult &res_;
 
-  Logger(int i, Notifier &n) : thid_(i), notifier_(n) {}
+  Logger(int thid, LoggerResult &res_) : thid_(thid), res_(res_) {
+    //if (thid_ == 0) pepoch_file_.open();
+  }
+  ~Logger(){
+    //if (thid_ == 0) pepoch_file_.close();
+  }
 
   void add_txn_executor(TxnExecutor &trans);
   void worker();
   void wait_deq();
   void worker_end(int thid);
   void logger_end();
+  std::uint64_t check_durable();
 };

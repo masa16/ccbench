@@ -136,12 +136,6 @@ else ()
     add_definitions(-DDURABLE_EPOCH=0)
 endif ()
 
-if (DEFINED NOTIFIER_THREAD)
-    add_definitions(-DNOTIFIER_THREAD=${NOTIFIER_THREAD})
-else ()
-    add_definitions(-DNOTIFIER_THREAD=0)
-endif ()
-
 if (DEFINED NOLOG)
     add_definitions(-DNOLOG=${NOLOG})
 else ()
