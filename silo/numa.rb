@@ -45,10 +45,10 @@ if ARGV.size < 2
   exit
 end
 
-def link_dir(node_id, log_id)
+def link_dir(node_id, dir_id, log_id)
   top = "/mnt/pmem#{node_id}"
   src = "log#{log_id}"
-  dst = "#{top}/#{ENV['USER']}/#{src}"
+  dst = "#{top}/#{ENV['USER']}/log#{dir_id}"
   if Dir.exist?(top)
     if !Dir.exist?(dst)
       Dir.mkdir(dst)
@@ -96,7 +96,7 @@ nodes.each do |node_id|
   n_logger.times do |i|
     log_cpu = a[-1-((n_logger-i-1)*n_logger_core/n_logger)]
     z << log_cpu+':'+a[idx[i]...idx[i+1]].join(',')
-    link_dir(node_id,log_id)
+    link_dir(node_id,i,log_id)
     log_id += 1
   end
 end
