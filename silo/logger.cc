@@ -126,8 +126,8 @@ void Logger::logging(bool quit) {
     __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
     // rotate logfile
-    if (max_epoch >= rotate_epoch_)
-      rotate_logfile(max_epoch);
+    //if (max_epoch >= rotate_epoch_)
+    //  rotate_logfile(max_epoch);
     notifier_.push(nid_buffer_, quit);
   }
 }
@@ -166,8 +166,9 @@ void Logger::worker() {
     if ((statbuf.st_mode & S_IFMT) != S_IFDIR) ERR;
   }
   logpath_ = logdir_ + "/data.log";
-  logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
-  logfile_.ftruncate(10 ^ 9);
+  logfile_.open(logpath_, O_CREAT | O_WRONLY, 0644);
+  //logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+  //logfile_.ftruncate(10 ^ 9);
 
   for (;;) {
     std::uint64_t t = rdtscp();
