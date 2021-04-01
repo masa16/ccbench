@@ -71,4 +71,7 @@ public:
   void notify(std::uint64_t min_dl, LoggerResult &stats);
   std::size_t size() {return size_;}
   bool empty() {return size_ == 0;}
+  std::uint64_t min_epoch() {
+    return front_->epoch_;
+  }
 };

@@ -132,7 +132,10 @@ void Logger::logging(bool quit) {
 
   // notify persistency to client
   auto min_dl = check_durable();
-  if (new_dl <= min_dl) {
+  if (nid_buffer_.min_epoch() <= min_dl) {
+    //if (thid_ == 0)
+    //  printf("old_dl=%lu new_dl=%lu min_dl=%lu size()=%lu min_epoch()=%lu\n",
+    //         old_dl,new_dl,min_dl,nid_buffer_.size(),nid_buffer_.min_epoch());
     nid_buffer_.notify(min_dl, res_);
   }
 }
