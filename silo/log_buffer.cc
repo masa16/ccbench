@@ -83,6 +83,7 @@ void LogBufferPool::terminate(Result &myres) {
 void LogBuffer::write(File &logfile, size_t &byte_count) {
   // prepare header
   alignas(512) LogHeader log_header;
+  if (log_set_size_==0) return;
   for (size_t i=0; i<log_set_size_; i++)
     log_header.chkSum_ += log_set_[i].computeChkSum();
   log_header.logRecNum_ = log_set_size_;
@@ -99,6 +100,8 @@ void LogBuffer::write(File &logfile, size_t &byte_count) {
 
 void LogBuffer::pass_nid(NidBuffer &nid_buffer,
                          LoggerResult &stats, std::uint64_t deq_time) {
+  std::size_t n = nid_set_.size();
+  if (n==0) return;
   std::uint64_t t = rdtscp();
   for (auto &nid : nid_set_) {
     stats.txn_latency_ += nid.t_mid_ - nid.tx_start_;
@@ -106,7 +109,6 @@ void LogBuffer::pass_nid(NidBuffer &nid_buffer,
     nid.t_mid_ = t;
   }
   // copy NotificationID
-  std::size_t n = nid_set_.size();
   nid_buffer.store(nid_set_, min_epoch_);
   stats.write_latency_ += (t - deq_time) * n;
   stats.nid_count_ += n;
