@@ -55,6 +55,8 @@ class NidBufferItem {
 };
 
 
+class LoggerResult;
+
 class NidBuffer {
 private:
   std::size_t size_ = 0;
@@ -65,58 +67,11 @@ public:
   NidBuffer() {
     front_ = end_ = new NidBufferItem(0);
   }
-  void store(std::vector<NotificationId> &nid_buffer);
-  void notify(std::uint64_t min_dl, NotifyStats &stats);
+  void store(std::vector<NotificationId> &nid_buffer, std::uint64_t epoch);
+  void notify(std::uint64_t min_dl, LoggerResult &stats);
   std::size_t size() {return size_;}
   bool empty() {return size_ == 0;}
-};
-
-
-class Notifier {
-private:
-  std::thread thread_;
-  std::mutex mutex_;
-  std::condition_variable cv_enq_;
-  std::condition_variable cv_deq_;
-  std::condition_variable cv_finish_;
-  NidBuffer buffer_;
-  std::size_t capa_ = 100000000;
-  std::size_t push_size_ = 0;
-  std::size_t max_buffers_ = 0;
-  std::size_t byte_count_ = 0;
-  std::size_t write_count_ = 0;
-  std::size_t buffer_count_ = 0;
-  std::uint64_t wait_latency_ = 0;
-  std::uint64_t write_latency_ = 0;
-  std::uint64_t write_start_ = ~(uint64_t)0;
-  std::uint64_t write_end_ = 0;
-  std::size_t try_count_ = 0;
-  double throughput_ = 0;
-  std::uint64_t start_clock_;
-  std::vector<std::array<std::uint64_t,6>> latency_log_;
-  std::vector<std::vector<std::uint64_t>> epoch_log_;
-  bool quit_ = false;
-  bool joined_ = false;
-  std::unordered_set<Logger*> logger_set_;
-  Stats depoch_diff_;
-  NidStats nid_stats_;
-  NotifyStats notify_stats_;
-
-public:
-  PepochFile pepoch_file_;
-
-  Notifier() {
-    latency_log_.reserve(65536);
-    start_clock_ = rdtscp();
-    pepoch_file_.open();
+  std::uint64_t min_epoch() {
+    return front_->epoch_;
   }
-  void add_logger(Logger *logger);
-  void make_durable(bool quit);
-  void temp_durable();
-  void worker();
-  void run();
-  void push(std::vector<NotificationId> &nid_buffer, bool quit);
-  void join();
-  void logger_end(Logger *logger);
-  void display();
 };

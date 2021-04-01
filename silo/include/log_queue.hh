@@ -56,7 +56,7 @@ public:
 
   std::vector<LogBuffer*> deq() {
     my_lock();
-#if DEQUEUE_MIN_EPOCH
+#if DEQ_MIN_EPOCH
     auto itr = queue_.cbegin();
     auto ret = itr->second;
     queue_.erase(itr);
