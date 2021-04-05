@@ -1,6 +1,4 @@
 #if DURABLE_EPOCH
-#include <iostream>
-#include <fstream>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -37,7 +35,7 @@ void PepochFile::close() {
   fd_ = -1;
 }
 
-void NidBuffer::notify(std::uint64_t min_dl, LoggerResult &stats) {
+void NidBuffer::notify(std::uint64_t min_dl, NotifyStats &stats) {
   if (front_ == NULL) return;
   stats.notify_count_ ++;
   NidBufferItem *orig_front = front_;

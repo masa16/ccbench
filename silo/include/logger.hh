@@ -66,6 +66,19 @@ public:
 };
 
 
+class NotifyStats {
+public:
+  std::uint64_t latency_ = 0;
+  std::uint64_t notify_latency_ = 0;
+  std::uint64_t min_latency_ = ~(uint64_t)0;
+  std::uint64_t max_latency_ = 0;
+  std::size_t count_ = 0;
+  std::size_t notify_count_ = 0;
+  std::size_t epoch_count_ = 0;
+  std::size_t epoch_diff_ = 0;
+};
+
+
 class LoggerResult {
 public:
   // Logger
@@ -94,9 +107,13 @@ public:
   std::size_t notify_count_ = 0;
   std::size_t epoch_count_ = 0;
   std::size_t epoch_diff_ = 0;
+  std::vector<std::array<std::uint64_t,7>> latency_log_;
 
-
+  LoggerResult() {
+    latency_log_.reserve(65536);
+  }
   void add(LoggerResult &other);
+  void add(NotifyStats &other, int thid, uint64_t min_dl);
   void display();
 };
 

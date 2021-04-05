@@ -72,3 +72,4 @@ alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte *ThLocalDurableEpoch;
 alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte DurableEpoch;
 
 alignas(CACHE_LINE_SIZE) GLOBAL Tuple *Table;
+GLOBAL uint64_t StartClock;

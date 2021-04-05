@@ -248,6 +248,7 @@ int main(int argc, char *argv[]) try {
                      std::ref(quit));
 #endif
   waitForReady(readys);
+  StartClock = rdtscp();
   storeRelease(start, true);
   for (size_t i = 0; i < FLAGS_extime; ++i) {
     sleepMs(1000);

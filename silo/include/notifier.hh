@@ -55,7 +55,7 @@ class NidBufferItem {
 };
 
 
-class LoggerResult;
+class NotifyStats;
 
 class NidBuffer {
 private:
@@ -68,7 +68,7 @@ public:
     front_ = end_ = new NidBufferItem(0);
   }
   void store(std::vector<NotificationId> &nid_buffer, std::uint64_t epoch);
-  void notify(std::uint64_t min_dl, LoggerResult &stats);
+  void notify(std::uint64_t min_dl, NotifyStats &stats);
   std::size_t size() {return size_;}
   bool empty() {return size_ == 0;}
   std::uint64_t min_epoch() {

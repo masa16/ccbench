@@ -1,5 +1,7 @@
 #if DURABLE_EPOCH
 //#define Linux 1
+#include <iostream>
+#include <fstream>
 #include "include/logger.hh"
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -67,8 +69,12 @@ void Logger::add_txn_executor(TxnExecutor &trans) {
 
 void Logger::logging(bool quit) {
   if (queue_.empty()) {
-    if (quit)
-      nid_buffer_.notify(~(uint64_t)0, res_);
+    if (quit) {
+      NotifyStats stats;
+      nid_buffer_.notify(~(uint64_t)0, stats);
+      std::uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
+      res_.add(stats, thid_, d);
+    }
     return;
   }
   //if (max_buffers_ < q_size) max_buffers_ = q_size;
@@ -136,7 +142,9 @@ void Logger::logging(bool quit) {
     //if (thid_ == 0)
     //  printf("old_dl=%lu new_dl=%lu min_dl=%lu size()=%lu min_epoch()=%lu\n",
     //         old_dl,new_dl,min_dl,nid_buffer_.size(),nid_buffer_.min_epoch());
-    nid_buffer_.notify(min_dl, res_);
+    NotifyStats stats;
+    nid_buffer_.notify(min_dl, stats);
+    res_.add(stats, thid_, min_dl);
   }
 }
 
@@ -270,6 +278,22 @@ void Logger::show_result() {
 }
 
 
+void LoggerResult::add(NotifyStats &other, int thid, uint64_t min_dl) {
+  if (other.count_ == 0) return;
+  latency_        += other.latency_;
+  notify_latency_ += other.notify_latency_;
+  count_          += other.count_;
+  notify_count_   += other.notify_count_;
+  epoch_count_    += other.epoch_count_;
+  epoch_diff_     += other.epoch_diff_;
+  uint64_t t = rdtscp();
+  latency_log_.emplace_back(
+    std::array<std::uint64_t,7>{
+      min_dl, t-StartClock, (uint64_t)thid, other.count_, other.latency_/other.count_,
+        other.min_latency_, other.max_latency_,
+    });
+}
+
 void LoggerResult::add(LoggerResult &other) {
   // Logger
   byte_count_   += other.byte_count_;
@@ -294,6 +318,12 @@ void LoggerResult::add(LoggerResult &other) {
   notify_count_   += other.notify_count_;
   epoch_count_    += other.epoch_count_;
   epoch_diff_     += other.epoch_diff_;
+  std::copy(other.latency_log_.begin(), other.latency_log_.end(),
+            std::back_inserter(latency_log_));
+  std::sort(latency_log_.begin(), latency_log_.end(),
+            [](auto a, auto b) {
+              return a[1] < b[1];
+            });
 }
 
 void LoggerResult::display() {
@@ -332,14 +362,12 @@ void LoggerResult::display() {
   std::cout << "try_count:\t" << try_count_ << endl;
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
   std::cout << "durable_epoch:\t" << d << endl;
-  /*
   std::ofstream o("latency.dat");
-  o << "epoch,time,count,mean_latency,min_latency,max_latency" << std::endl;
+  o << "epoch,time,thid,count,mean_latency,min_latency,max_latency" << std::endl;
   for (auto x : latency_log_) {
-    o << x[0] << "," << x[1]/cps << "," << x[2] << "," << x[3]/cps << "," << x[4]/cps<< "," << x[5]/cps <<std::endl;
+    o << x[0] << "," << x[1]/cps << "," << x[2] << "," << x[3] << "," << x[4]/cps << "," << x[5]/cps<< "," << x[6]/cps <<std::endl;
   }
   o.close();
-  */
   /*
   std::ofstream q("epoch.dat");
   for (auto v : epoch_log_) {
