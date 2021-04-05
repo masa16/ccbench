@@ -6,15 +6,29 @@
 
 // no lock required since each thread has unique LogBuffer
 
-void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
-                     std::vector<WriteElement<Tuple>> &write_set,
-                     char *val, bool new_epoch_begins) {
+void LogBufferPool::push(std::uint64_t tid, NotificationId &nid,
+                         std::vector<WriteElement<Tuple>> &write_set,
+                         char *val, bool new_epoch_begins) {
   nid.tid_ = tid;
   nid.t_mid_ = rdtscp();
   // check buffer capa
-  if (log_set_size_ + write_set.size() > LOG_BUFFER_SIZE) {
-    pool_.publish();
+  if (current_buffer_->log_set_size_ + write_set.size() > LOG_BUFFER_SIZE
+      || new_epoch_begins) {
+    publish();
   }
+  current_buffer_->push(tid, nid, write_set, val);
+  // buffer full
+  if (current_buffer_->log_set_size_ == LOG_BUFFER_SIZE) {
+    publish();
+  }
+  auto t = rdtscp();
+  txn_latency_ += t - nid.tx_start_;
+  bkpr_latency_ += t - nid.t_mid_;
+}
+
+void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
+                     std::vector<WriteElement<Tuple>> &write_set,
+                     char *val) {
   // buffering
   for (auto &itr : write_set) {
     log_set_[log_set_size_++] = LogRecord(tid, itr.key_, val);
@@ -26,14 +40,6 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
   std::uint64_t epoch = tidw.epoch;
   if (epoch < min_epoch_) min_epoch_ = epoch;
   if (epoch > max_epoch_) max_epoch_ = epoch;
-  // buffer full or new epoch begins
-  if (log_set_size_ == LOG_BUFFER_SIZE ||
-      nid_set_.size() == NID_BUFFER_SIZE || new_epoch_begins) {
-    pool_.publish();
-  }
-  auto t = rdtscp();
-  pool_.txn_latency_ += t - nid.tx_start_;
-  pool_.bkpr_latency_ += t - nid.t_mid_;
 }
 
 static std::mutex smutex;

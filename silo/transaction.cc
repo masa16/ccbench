@@ -275,7 +275,7 @@ bool TxnExecutor::validationPhase() {
 
 #if DURABLE_EPOCH
 void TxnExecutor::wal(std::uint64_t ctid) {
-  log_buffer_pool_.current_buffer_->push(ctid, nid_, write_set_, write_val_, new_epoch_begins_);
+  log_buffer_pool_.push(ctid, nid_, write_set_, write_val_, new_epoch_begins_);
   if (new_epoch_begins_) {
     // store CTIDW
     asm volatile("":: : "memory");

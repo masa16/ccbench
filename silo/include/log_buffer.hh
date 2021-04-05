@@ -23,15 +23,15 @@ class LogBuffer {
 private:
   LogRecord *log_set_;
   LogRecord *log_set_ptr_;
-  size_t log_set_size_ = 0;
   std::vector<NotificationId> nid_set_;
   LogBufferPool &pool_;
 public:
+  size_t log_set_size_ = 0;
   uint64_t min_epoch_ = ~(uint64_t)0;
   uint64_t max_epoch_ = 0;
   void push(std::uint64_t tid, NotificationId &nid,
             std::vector<WriteElement<Tuple>> &write_set,
-            char *val, bool new_epoch_begins);
+            char *val);
   void write(File &logfile, size_t &byte_count);
   void pass_nid(NidBuffer &nid_buffer,
                 LoggerResult &nid_stats, std::uint64_t deq_time);
@@ -79,6 +79,9 @@ public:
     }
     numa_set_interleave_mask(mask);
   }
+  void push(std::uint64_t tid, NotificationId &nid,
+            std::vector<WriteElement<Tuple>> &write_set,
+            char *val, bool new_epoch_begins);
   void publish();
   void return_buffer(LogBuffer *lb);
   void terminate(Result &myres);
