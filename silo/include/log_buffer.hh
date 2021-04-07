@@ -15,8 +15,9 @@
 
 class LogQueue;
 class NotificationId;
+class Notifier;
+class NidStats;
 class NidBuffer;
-class LoggerResult;
 class LogBufferPool;
 
 class LogBuffer {
@@ -34,7 +35,7 @@ public:
             char *val);
   void write(File &logfile, size_t &byte_count);
   void pass_nid(NidBuffer &nid_buffer,
-                LoggerResult &nid_stats, std::uint64_t deq_time);
+                NidStats &nid_stats, std::uint64_t deq_time);
   void return_buffer();
   bool empty();
 

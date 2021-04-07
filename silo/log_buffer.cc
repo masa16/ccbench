@@ -2,7 +2,6 @@
 #include "include/log_buffer.hh"
 #include "include/log_queue.hh"
 #include "include/notifier.hh"
-#include "include/logger.hh"
 
 // no lock required since each thread has unique LogBuffer
 
@@ -29,6 +28,7 @@ void LogBufferPool::push(std::uint64_t tid, NotificationId &nid,
 void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
                      std::vector<WriteElement<Tuple>> &write_set,
                      char *val) {
+  assert(write_set.size() > 0);
   // buffering
   for (auto &itr : write_set) {
     log_set_[log_set_size_++] = LogRecord(tid, itr.key_, val);
@@ -40,6 +40,7 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
   std::uint64_t epoch = tidw.epoch;
   if (epoch < min_epoch_) min_epoch_ = epoch;
   if (epoch > max_epoch_) max_epoch_ = epoch;
+  assert(min_epoch_ == max_epoch_);
 }
 
 static std::mutex smutex;
@@ -87,9 +88,9 @@ void LogBufferPool::terminate(Result &myres) {
 }
 
 void LogBuffer::write(File &logfile, size_t &byte_count) {
+  if (log_set_size_==0) return;
   // prepare header
   alignas(512) LogHeader log_header;
-  if (log_set_size_==0) return;
   for (size_t i=0; i<log_set_size_; i++)
     log_header.chkSum_ += log_set_[i].computeChkSum();
   log_header.logRecNum_ = log_set_size_;
@@ -105,7 +106,7 @@ void LogBuffer::write(File &logfile, size_t &byte_count) {
 }
 
 void LogBuffer::pass_nid(NidBuffer &nid_buffer,
-                         LoggerResult &stats, std::uint64_t deq_time) {
+                         NidStats &stats, std::uint64_t deq_time) {
   std::size_t n = nid_set_.size();
   if (n==0) return;
   std::uint64_t t = rdtscp();
@@ -117,7 +118,7 @@ void LogBuffer::pass_nid(NidBuffer &nid_buffer,
   // copy NotificationID
   nid_buffer.store(nid_set_, min_epoch_);
   stats.write_latency_ += (t - deq_time) * n;
-  stats.nid_count_ += n;
+  stats.count_ += n;
   // clear nid_set_
   nid_set_.clear();
   // init epoch

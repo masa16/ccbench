@@ -20,6 +20,9 @@
 #include "include/transaction.hh"
 #include "include/util.hh"
 #include "include/logger.hh"
+#if DURABLE_EPOCH
+#include "include/notifier.hh"
+#endif
 #if WALPMEM
 #include <numa.h>
 #endif
@@ -171,13 +174,14 @@ RETRY:
 }
 
 #if DURABLE_EPOCH
-void logger_th(int thid, std::atomic<Logger*> *logp, LoggerResult &logger_result){
+void logger_th(int thid, Notifier &notifier, std::atomic<Logger*> *logp){
 #if 0
   if (!FLAGS_affinity.empty()) {
     std::cout << "Logger #" << thid << ": on CPU " << sched_getcpu() << "\n";
   }
 #endif
-  alignas(CACHE_LINE_SIZE) Logger logger(thid, logger_result);
+  alignas(CACHE_LINE_SIZE) Logger logger(thid, notifier);
+  notifier.add_logger(&logger);
   logp->store(&logger);
   logger.worker();
 }
@@ -223,14 +227,14 @@ int main(int argc, char *argv[]) try {
 #endif
 #if DURABLE_EPOCH
   std::atomic<Logger *> logs[FLAGS_logger_num];
-  LoggerResult logger_result[FLAGS_logger_num];
+  Notifier notifier;
   std::vector<std::thread> lthv;
 
   int i=0, j=0;
   for (auto itr = affin.nodes_.begin(); itr != affin.nodes_.end(); ++itr,++j) {
     int lcpu = itr->logger_cpu_;
     logs[j].store(0);
-    lthv.emplace_back(logger_th, j, &(logs[j]), std::ref(logger_result[j]));
+    lthv.emplace_back(logger_th, j, std::ref(notifier), &(logs[j]));
     if (!FLAGS_affinity.empty()) {
       set_cpu(lthv.back(), lcpu);
     }
@@ -248,7 +252,6 @@ int main(int argc, char *argv[]) try {
                      std::ref(quit));
 #endif
   waitForReady(readys);
-  StartClock = rdtscp();
   storeRelease(start, true);
   for (size_t i = 0; i < FLAGS_extime; ++i) {
     sleepMs(1000);
@@ -264,11 +267,7 @@ int main(int argc, char *argv[]) try {
   }
   ShowOptParameters();
 #if DURABLE_EPOCH
-  LoggerResult logger_all_result;
-  for (unsigned int i = 0; i < FLAGS_logger_num; ++i) {
-    logger_all_result.add(logger_result[i]);
-  }
-  logger_all_result.display();
+  notifier.display();
 #endif
   SiloResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime,
                                  FLAGS_thread_num);

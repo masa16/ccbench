@@ -55,12 +55,11 @@ class NidBufferItem {
 };
 
 
-class NotifyStats;
-
 class NidBuffer {
 private:
   std::size_t size_ = 0;
   std::uint64_t max_epoch_ = 0;
+  std::mutex mutex_;
 public:
   NidBufferItem *front_;
   NidBufferItem *end_;
@@ -74,4 +73,53 @@ public:
   std::uint64_t min_epoch() {
     return front_->epoch_;
   }
+};
+
+
+class Notifier {
+private:
+  std::thread thread_;
+  std::mutex mutex_;
+  std::condition_variable cv_enq_;
+  std::condition_variable cv_deq_;
+  std::condition_variable cv_finish_;
+  std::size_t capa_ = 100000000;
+  std::size_t push_size_ = 0;
+  std::size_t max_buffers_ = 0;
+  std::size_t byte_count_ = 0;
+  std::size_t write_count_ = 0;
+  std::size_t buffer_count_ = 0;
+  std::uint64_t wait_latency_ = 0;
+  std::uint64_t write_latency_ = 0;
+  std::uint64_t write_start_ = ~(uint64_t)0;
+  std::uint64_t write_end_ = 0;
+  std::size_t try_count_ = 0;
+  double throughput_ = 0;
+  std::uint64_t start_clock_;
+  std::vector<std::array<std::uint64_t,6>> latency_log_;
+  std::vector<std::vector<std::uint64_t>> epoch_log_;
+  bool quit_ = false;
+  bool joined_ = false;
+  std::unordered_set<Logger*> logger_set_;
+  Stats depoch_diff_;
+  NidStats nid_stats_;
+  NotifyStats notify_stats_;
+
+public:
+  PepochFile pepoch_file_;
+  NidBuffer buffer_;
+
+  Notifier() {
+    latency_log_.reserve(65536);
+    start_clock_ = rdtscp();
+    pepoch_file_.open();
+  }
+  void add_logger(Logger *logger);
+  uint64_t check_durable();
+  void make_durable(NidBuffer &buffer, bool quit);
+  void temp_durable();
+  void worker();
+  void push(NidBuffer &nid_buffer, bool quit);
+  void logger_end(Logger *logger);
+  void display();
 };

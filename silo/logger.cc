@@ -1,7 +1,5 @@
 #if DURABLE_EPOCH
 //#define Linux 1
-#include <iostream>
-#include <fstream>
 #include "include/logger.hh"
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -69,12 +67,8 @@ void Logger::add_txn_executor(TxnExecutor &trans) {
 
 void Logger::logging(bool quit) {
   if (queue_.empty()) {
-    if (quit) {
-      NotifyStats stats;
-      nid_buffer_.notify(~(uint64_t)0, stats);
-      std::uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
-      res_.add(stats, thid_, d);
-    }
+    if (quit)
+      notifier_.make_durable(nid_buffer_, quit);
     return;
   }
   //if (max_buffers_ < q_size) max_buffers_ = q_size;
@@ -97,20 +91,20 @@ void Logger::logging(bool quit) {
   if (min_epoch > tid.epoch) min_epoch = tid.epoch;
   // compare with durable epoch
   std::uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
-  res_.depoch_diff_.sample(min_epoch - d);
+  depoch_diff_.sample(min_epoch - d);
 
   // write log
   std::uint64_t max_epoch = 0;
   std::uint64_t t = rdtscp();
-  if (res_.write_start_==0) res_.write_start_ = t;
+  if (write_start_==0) write_start_ = t;
   std::vector<LogBuffer*> log_buffer_vec = queue_.deq();
   size_t buffer_num = log_buffer_vec.size();
   for (LogBuffer *log_buffer : log_buffer_vec) {
     std::uint64_t deq_time = rdtscp();
     if (log_buffer->max_epoch_ > max_epoch)
       max_epoch = log_buffer->max_epoch_;
-    log_buffer->write(logfile_, res_.byte_count_);
-    log_buffer->pass_nid(nid_buffer_, res_, deq_time);
+    log_buffer->write(logfile_, byte_count_);
+    log_buffer->pass_nid(nid_buffer_, nid_stats_, deq_time);
     log_buffer->return_buffer();
   }
 #ifdef Linux
@@ -119,64 +113,25 @@ void Logger::logging(bool quit) {
   logfile_.fsync();
 #endif
   //usleep(1000000); // increase latency
-  res_.write_end_ = rdtscp();
-  res_.write_time_ += res_.write_end_ - t;
-  res_.write_count_++;
-  res_.buffer_count_ += buffer_num;
+  write_end_ = rdtscp();
+  write_latency_ += write_end_ - t;
+  write_count_++;
+  buffer_count_ += buffer_num;
 
   // publish Durable Epoch of this thread
   auto new_dl = min_epoch - 1;
   auto old_dl = __atomic_load_n(&(ThLocalDurableEpoch[thid_].obj_), __ATOMIC_ACQUIRE);
-  if (old_dl < new_dl) {
+  if (old_dl < new_dl || quit) {
     asm volatile("":: : "memory");
     __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
     asm volatile("":: : "memory");
     // // rotate logfile
     // if (max_epoch >= rotate_epoch_)
     //   rotate_logfile(max_epoch);
-  }
-
-  // notify persistency to client
-  auto min_dl = check_durable();
-  if (nid_buffer_.min_epoch() <= min_dl) {
-    //if (thid_ == 0)
-    //  printf("old_dl=%lu new_dl=%lu min_dl=%lu size()=%lu min_epoch()=%lu\n",
-    //         old_dl,new_dl,min_dl,nid_buffer_.size(),nid_buffer_.min_epoch());
-    NotifyStats stats;
-    nid_buffer_.notify(min_dl, stats);
-    res_.add(stats, thid_, min_dl);
+    notifier_.make_durable(nid_buffer_, quit);
   }
 }
 
-
-uint64_t Logger::check_durable() {
-  static std::mutex smutex;
-  static PepochFile pepoch_file;
-  res_.try_count_ += 1;
-  std::unique_lock<std::mutex> lock(smutex);
-  uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
-  //if (thid_ != 0) {
-  //  return d;
-  //}
-  // calculate min(d_l)
-  uint64_t min_dl = __atomic_load_n(&(ThLocalDurableEpoch[0].obj_), __ATOMIC_ACQUIRE);
-  for (unsigned int i=1; i < FLAGS_logger_num; ++i) {
-    uint64_t dl = __atomic_load_n(&(ThLocalDurableEpoch[i].obj_), __ATOMIC_ACQUIRE);
-    if (dl < min_dl) {
-      min_dl = dl;
-    }
-  }
-  if (d < min_dl) {
-    // store Durable Epoch
-    pepoch_file.open();
-    pepoch_file.write(min_dl);
-    pepoch_file.close();
-    asm volatile("":: : "memory");
-    __atomic_store_n(&(DurableEpoch.obj_), min_dl, __ATOMIC_RELEASE);
-    asm volatile("":: : "memory");
-  }
-  return min_dl;
-}
 
 void Logger::wait_deq() {
   while (!queue_.wait_deq()) {
@@ -198,6 +153,7 @@ void Logger::wait_deq() {
       asm volatile("":: : "memory");
       __atomic_store_n(&(ThLocalDurableEpoch[thid_].obj_), new_dl, __ATOMIC_RELEASE);
       asm volatile("":: : "memory");
+      notifier_.make_durable(nid_buffer_, false);
     }
   }
 }
@@ -212,18 +168,18 @@ void Logger::worker() {
   }
   logpath_ = logdir_ + "/data.log";
   logfile_.open(logpath_, O_CREAT | O_WRONLY, 0644);
-  //logfile_.open(logpath_, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   //logfile_.ftruncate(10 ^ 9);
 
   for (;;) {
     std::uint64_t t = rdtscp();
     wait_deq();
     if (queue_.quit()) break;
-    res_.wait_time_ += rdtscp() - t;
+    wait_latency_ += rdtscp() - t;
     logging(false);
   }
   logging(true);
   // ending
+  notifier_.logger_end(this);
   logger_end();
   show_result();
 }
@@ -261,10 +217,10 @@ void Logger::show_result() {
   static std::mutex mtx;
   std::lock_guard<std::mutex> lock(mtx);
   cout << "Logger#"<<thid_
-       <<" byte_count[B]=" << res_.byte_count_
-       <<" write_latency[s]=" << res_.write_time_/cps
-       <<" throughput[B/s]=" << res_.byte_count_/(res_.write_time_/cps)
-       <<" wait_latency[s]=" << res_.wait_time_/cps
+       <<" byte_count[B]=" << byte_count_
+       <<" write_latency[s]=" << write_latency_/cps
+       <<" throughput[B/s]=" << byte_count_/(write_latency_/cps)
+       <<" wait_latency[s]=" << wait_latency_/cps
        << endl;
 #if 0
   for(auto itr : log_buffer_map_)
@@ -276,110 +232,4 @@ void Logger::show_result() {
   cout<<"counter="<<counter_<<endl;
 #endif
 }
-
-
-void LoggerResult::add(NotifyStats &other, int thid, uint64_t min_dl) {
-  if (other.count_ == 0) return;
-  latency_        += other.latency_;
-  notify_latency_ += other.notify_latency_;
-  count_          += other.count_;
-  notify_count_   += other.notify_count_;
-  epoch_count_    += other.epoch_count_;
-  epoch_diff_     += other.epoch_diff_;
-  uint64_t t = rdtscp();
-  latency_log_.emplace_back(
-    std::array<std::uint64_t,7>{
-      min_dl, t-StartClock, (uint64_t)thid, other.count_, other.latency_/other.count_,
-        other.min_latency_, other.max_latency_,
-    });
-}
-
-void LoggerResult::add(LoggerResult &other) {
-  // Logger
-  byte_count_   += other.byte_count_;
-  write_count_  += other.write_count_;
-  buffer_count_ += other.buffer_count_;
-  write_time_   += other.write_time_;
-  wait_time_    += other.wait_time_;
-  throughput_   += (double)other.byte_count_/other.write_time_;
-  depoch_diff_.unify(other.depoch_diff_);
-  if (write_start_ > other.write_start_) write_start_ = other.write_start_;
-  if (write_end_ < other.write_end_) write_end_ = other.write_end_;
-  try_count_ += other.try_count_;
-  // NidStats
-  nid_count_         += other.nid_count_;
-  txn_latency_       += other.txn_latency_;
-  log_queue_latency_ += other.log_queue_latency_;
-  write_latency_     += other.write_latency_;
-  // NotifyStats
-  latency_        += other.latency_;
-  notify_latency_ += other.notify_latency_;
-  count_          += other.count_;
-  notify_count_   += other.notify_count_;
-  epoch_count_    += other.epoch_count_;
-  epoch_diff_     += other.epoch_diff_;
-  std::copy(other.latency_log_.begin(), other.latency_log_.end(),
-            std::back_inserter(latency_log_));
-  std::sort(latency_log_.begin(), latency_log_.end(),
-            [](auto a, auto b) {
-              return a[1] < b[1];
-            });
-}
-
-void LoggerResult::display() {
-  double cpms = FLAGS_clocks_per_us*1e3;
-  double cps = FLAGS_clocks_per_us*1e6;
-  size_t n = FLAGS_logger_num;
-  // Logger
-  std::cout << "wait_time[s]:\t" << wait_time_/cps << endl;
-  std::cout << "write_time[s]:\t" << write_time_/cps << endl;
-  std::cout << "write_count:\t" << write_count_<< endl;
-  std::cout << "byte_count[B]:\t" << byte_count_<< endl;
-  std::cout << "buffer_count:\t" << buffer_count_<< endl;
-  depoch_diff_.display("depoch_diff");
-  std::cout << "throughput(thread_sum)[B/s]:\t" << throughput_*cps << endl;
-  std::cout << "throughput(byte_sum)[B/s]:\t" << cps*byte_count_/write_time_*n << endl;
-  std::cout << "throughput(elap)[B/s]:\t" << cps*byte_count_/(write_end_-write_start_) << endl;
-  // NidStats
-  std::cout << "nid_count:\t" << nid_count_ << endl;
-  std::cout << std::fixed << std::setprecision(4)
-            << "txn_latency[ms]:\t" << txn_latency_/cpms/nid_count_ << endl;
-  std::cout << std::fixed << std::setprecision(4)
-            << "log_queue_latency[ms]:\t" << log_queue_latency_/cpms/nid_count_ << endl;
-  std::cout << std::fixed << std::setprecision(4)
-            << "write_latency[ms]:\t" << write_latency_/cpms/nid_count_ << endl;
-  // NotifyStats
-  std::cout << std::fixed << std::setprecision(4)
-            << "notify_latency[ms]:\t" << notify_latency_/cpms/count_ << endl;
-  std::cout << std::fixed << std::setprecision(4)
-            << "durable_latency[ms]:\t" << latency_/cpms/count_ << endl;
-  std::cout << "notify_count:\t" << notify_count_ << endl;
-  std::cout << "durable_count:\t" << count_ << endl;
-  std::cout << "mean_durable_count:\t" << (double)count_/notify_count_ << endl;
-  std::cout << std::fixed << std::setprecision(2)
-            << "mean_epoch_diff:\t" << (double)epoch_diff_/epoch_count_ << endl;
-
-  std::cout << "try_count:\t" << try_count_ << endl;
-  uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
-  std::cout << "durable_epoch:\t" << d << endl;
-  std::ofstream o("latency.dat");
-  o << "epoch,time,thid,count,mean_latency,min_latency,max_latency" << std::endl;
-  for (auto x : latency_log_) {
-    o << x[0] << "," << x[1]/cps << "," << x[2] << "," << x[3] << "," << x[4]/cps << "," << x[5]/cps<< "," << x[6]/cps <<std::endl;
-  }
-  o.close();
-  /*
-  std::ofstream q("epoch.dat");
-  for (auto v : epoch_log_) {
-    auto itr = v.begin();
-    q << *itr;
-    while (++itr != v.end()) {
-      q << "," << *itr;
-    }
-    q << std::endl;
-  }
-  q.close();
-  */
-}
-
 #endif
