@@ -161,8 +161,9 @@ RETRY:
       goto RETRY;
     }
 
-#if DURABLE_EPOCH && MAX_EPOCH_DIFF > 0
-    trans.stopForDurableEpoch(quit);
+#if DURABLE_EPOCH && EPOCH_DIFF
+    if (FLAGS_epoch_diff > 0)
+      trans.stopForDurableEpoch(quit);
 #endif
   }
 

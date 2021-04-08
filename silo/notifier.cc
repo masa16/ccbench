@@ -72,14 +72,16 @@ void Notifier::make_durable(NidBuffer &nid_buffer, bool quit) {
   NotifyStats stats;
   nid_buffer.notify(epoch, stats);
   if (stats.count_ > 0) {
-    std::lock_guard<std::mutex> lock(mutex_);
     notify_stats_.add(stats);
-    uint64_t t = rdtscp();
-    latency_log_.emplace_back(
-      std::array<std::uint64_t,6>{
-        min_dl, t-start_clock_, stats.count_, stats.latency_/stats.count_,
-          stats.min_latency_, stats.max_latency_,
-          });
+    if (FLAGS_latency_dat) {
+      uint64_t t = rdtscp();
+      std::lock_guard<std::mutex> lock(mutex_);
+      latency_log_.emplace_back(
+        std::array<std::uint64_t,6>{
+          min_dl, t-start_clock_, stats.count_, stats.latency_/stats.count_,
+            stats.min_latency_, stats.max_latency_,
+            });
+    }
   }
 }
 

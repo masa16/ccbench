@@ -44,6 +44,8 @@ DEFINE_string(affinity, "", "CPU affinity between worker and logger thread, e.g.
 DEFINE_int64(notifier_cpu, -1, "logical core id for notifier.");
 DEFINE_uint64(buffer_num, 2, "Number of log buffers per logger thread.");
 DEFINE_uint64(buffer_size, 512, "Size of log buffer in KiB");
+DEFINE_uint64(epoch_diff, 0, "Epoch difference threshold to stop transaction (0 for no stop)");
+DEFINE_bool(latency_dat, false, "Write latency.dat or not");
 DEFINE_uint64(tuple_num, 1000000, "Total number of records.");
 DEFINE_bool(ycsb, true,
             "True uses zipf_skew, false uses faster random generator.");
@@ -61,6 +63,8 @@ DECLARE_string(affinity);
 DECLARE_int64(notifier_cpu);
 DECLARE_uint64(buffer_num);
 DECLARE_uint64(buffer_size);
+DECLARE_uint64(epoch_diff);
+DECLARE_bool(latency_dat);
 DECLARE_uint64(tuple_num);
 DECLARE_bool(ycsb);
 DECLARE_double(zipf_skew);

@@ -108,6 +108,7 @@ void displayParameter() {
   cout << "#FLAGS_logger_num:\t" << FLAGS_logger_num << endl;
   cout << "#FLAGS_buffer_num:\t" << FLAGS_buffer_num << endl;
   cout << "#FLAGS_buffer_size:\t" << FLAGS_buffer_size << endl;
+  cout << "#FLAGS_epoch_diff:\t" << FLAGS_epoch_diff << endl;
 #endif
   cout << "#FLAGS_tuple_num:\t" << FLAGS_tuple_num << endl;
   cout << "#FLAGS_ycsb:\t\t" << FLAGS_ycsb << endl;
