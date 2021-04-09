@@ -73,7 +73,7 @@ void Notifier::make_durable(NidBuffer &nid_buffer, bool quit) {
   nid_buffer.notify(epoch, stats);
   if (stats.count_ > 0) {
     notify_stats_.add(stats);
-    if (FLAGS_latency_dat) {
+    if (FLAGS_latency_log) {
       uint64_t t = rdtscp();
       std::lock_guard<std::mutex> lock(mutex_);
       latency_log_.emplace_back(
@@ -184,12 +184,15 @@ void Notifier::display() {
   std::cout << "try_count:\t" << try_count_ << endl;
   uint64_t d = __atomic_load_n(&(DurableEpoch.obj_), __ATOMIC_ACQUIRE);
   std::cout << "durable_epoch:\t" << d << endl;
-  std::ofstream o("latency.dat");
-  o << "epoch,time,count,mean_latency,min_latency,max_latency" << std::endl;
-  for (auto x : latency_log_) {
-    o << x[0] << "," << x[1]/cps << "," << x[2] << "," << x[3]/cps << "," << x[4]/cps<< "," << x[5]/cps <<std::endl;
+  if (FLAGS_latency_log) {
+    std::ofstream o("latency.dat");
+    o << "epoch,time,count,mean_latency,min_latency,max_latency" << std::endl;
+    for (auto x : latency_log_) {
+      o << x[0] << "," << x[1]/cps << "," << x[2] << "," <<
+        x[3]/cps << "," << x[4]/cps<< "," << x[5]/cps <<std::endl;
+    }
+    o.close();
   }
-  o.close();
   /*
   std::ofstream q("epoch.dat");
   for (auto v : epoch_log_) {
