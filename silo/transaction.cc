@@ -5,6 +5,9 @@
 #include "include/atomic_tool.hh"
 #include "include/log.hh"
 #include "include/transaction.hh"
+#if DURABLE_EPOCH
+#include "include/util.hh"
+#endif
 
 extern void displayDB();
 
@@ -225,12 +228,9 @@ bool TxnExecutor::validationPhase() {
   if (this->status_ == TransactionStatus::kAborted) return false;
 #endif
 
-  uint64_t pre_epoch = ThLocalEpoch[thid_].obj_;
   asm volatile("":: : "memory");
   atomicStoreThLocalEpoch(thid_, atomicLoadGE());
   asm volatile("":: : "memory");
-  uint64_t new_epoch = ThLocalEpoch[thid_].obj_;
-  new_epoch_begins_ = (pre_epoch != new_epoch);
 
   /* Phase 2 abort if any condition of below is satisfied.
    * 1. tid of read_set_ changed from it that was got in Read Phase.
@@ -275,12 +275,15 @@ bool TxnExecutor::validationPhase() {
 
 #if DURABLE_EPOCH
 void TxnExecutor::wal(std::uint64_t ctid) {
-  log_buffer_pool_.push(ctid, nid_, write_set_, write_val_, new_epoch_begins_);
-  if (new_epoch_begins_) {
+  Tidword old_tid;
+  Tidword new_tid;
+  old_tid.obj_ = loadAcquire(CTIDW[thid_].obj_);
+  new_tid.obj_ = ctid;
+  bool new_epoch_begins = (old_tid.epoch != new_tid.epoch);
+  log_buffer_pool_.push(ctid, nid_, write_set_, write_val_, new_epoch_begins);
+  if (new_epoch_begins) {
     // store CTIDW
-    asm volatile("":: : "memory");
     __atomic_store_n(&(CTIDW[thid_].obj_), ctid, __ATOMIC_RELEASE);
-    asm volatile("":: : "memory");
   }
 }
 #elif PMEMTEST
@@ -477,22 +480,51 @@ void TxnExecutor::writePhase() {
   write_set_.clear();
 }
 
-#if DURABLE_EPOCH && EPOCH_DIFF
-void TxnExecutor::stopForDurableEpoch(const bool &quit) {
-  // pause this worker until Durable epoch catches up
+#if DURABLE_EPOCH
+bool TxnExecutor::pauseCondition() {
+  auto dlepoch = loadAcquire(ThLocalDurableEpoch[logger_thid_].obj_);
+  return loadAcquire(ThLocalEpoch[thid_].obj_) > dlepoch + FLAGS_epoch_diff;
+}
+
+void TxnExecutor::epochWork(uint64_t &epoch_timer_start,
+                            uint64_t &epoch_timer_stop) {
+  usleep(1);
+  if (thid_ == 0) {
+    leaderWork(epoch_timer_start, epoch_timer_stop);
+  }
+  Tidword old_tid;
+  old_tid.obj_ = loadAcquire(CTIDW[thid_].obj_);
+  // load Global Epoch
+  atomicStoreThLocalEpoch(thid_, atomicLoadGE());
+  uint64_t new_epoch = loadAcquire(ThLocalEpoch[thid_].obj_);
+  if (old_tid.epoch != new_epoch) {
+    Tidword tid;
+    tid.epoch = new_epoch;
+    tid.lock = 0;
+    tid.latest = 1;
+    // store CTIDW
+    __atomic_store_n(&(CTIDW[thid_].obj_), tid.obj_, __ATOMIC_RELEASE);
+  }
+}
+
+void TxnExecutor::durableEpochWork(uint64_t &epoch_timer_start,
+                                   uint64_t &epoch_timer_stop, const bool &quit) {
   std::uint64_t t = rdtscp();
-  //auto epoch = loadAcquire(DurableEpoch.obj_);
-  auto epoch = loadAcquire(ThLocalDurableEpoch[logger_thid_].obj_);
-  if (ThLocalEpoch[thid_].obj_ > epoch + FLAGS_epoch_diff) {
-    log_buffer_pool_.publish();
-    for (;;) {
-      //auto epoch = loadAcquire(DurableEpoch.obj_);
-      auto epoch = loadAcquire(ThLocalDurableEpoch[logger_thid_].obj_);
-      if (ThLocalEpoch[thid_].obj_ <= epoch + FLAGS_epoch_diff) break;
-      if (loadAcquire(quit)) break;
-      usleep(5);
+  // pause this worker until Durable epoch catches up
+  if (FLAGS_epoch_diff > 0) {
+    if (pauseCondition()) {
+      log_buffer_pool_.publish();
+      do {
+        epochWork(epoch_timer_start, epoch_timer_stop);
+        if (loadAcquire(quit)) return;
+      } while (pauseCondition());
     }
   }
+  while (!log_buffer_pool_.is_ready()) {
+    epochWork(epoch_timer_start, epoch_timer_stop);
+    if (loadAcquire(quit)) return;
+  }
+  if (log_buffer_pool_.current_buffer_==NULL) std::abort();
   sres_->local_wait_depoch_latency_ += rdtscp() - t;
 }
 #endif

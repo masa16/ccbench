@@ -52,8 +52,6 @@ public:
   // used by fast approach for benchmark
   char return_val_[VAL_SIZE];
 
-  bool new_epoch_begins_;
-
 #if DURABLE_EPOCH
   LogBufferPool log_buffer_pool_;
   NotificationId nid_;
@@ -127,5 +125,11 @@ public:
 
   void writePhase();
 
-  void stopForDurableEpoch(const bool &quit);
+#if DURABLE_EPOCH
+  bool pauseCondition();
+  void epochWork(uint64_t &epoch_timer_start,
+                 uint64_t &epoch_timer_stop);
+  void durableEpochWork(uint64_t &epoch_timer_start,
+                        uint64_t &epoch_timer_stop, const bool &quit);
+#endif
 };

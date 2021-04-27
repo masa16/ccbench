@@ -130,6 +130,10 @@ RETRY:
       // printf("Thread #%d: on CPU %d\n", thid, sched_getcpu());
     }
 
+#if DURABLE_EPOCH
+    trans.durableEpochWork(epoch_timer_start, epoch_timer_stop, quit);
+#endif
+
     if (loadAcquire(quit)) break;
 
     trans.begin();
@@ -160,11 +164,6 @@ RETRY:
       ++myres.local_abort_counts_;
       goto RETRY;
     }
-
-#if DURABLE_EPOCH && EPOCH_DIFF
-    if (FLAGS_epoch_diff > 0)
-      trans.stopForDurableEpoch(quit);
-#endif
   }
 
 #if DURABLE_EPOCH

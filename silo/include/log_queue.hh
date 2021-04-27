@@ -14,14 +14,14 @@ private:
   std::map<uint64_t,std::vector<LogBuffer*>> queue_;
   std::size_t capacity_ = 1000;
   std::atomic<bool> quit_;
-  std::chrono::microseconds timeout;
+  std::chrono::microseconds timeout_;
 
 private:
   void my_lock() {
     for (;;) {
       unsigned int lock = 0;
       if (my_mutex_.compare_exchange_strong(lock, 1)) return;
-      usleep(1);
+      std::this_thread::sleep_for(std::chrono::nanoseconds(10));
     }
   }
   void my_unlock() {
@@ -32,7 +32,7 @@ public:
   LogQueue() {
     my_mutex_.store(0);
     quit_.store(false);
-    timeout = std::chrono::microseconds((int)(FLAGS_epoch_time*1000));
+    timeout_ = std::chrono::microseconds((int)(FLAGS_epoch_time*1000));
   }
 
   void enq(LogBuffer* x) {
@@ -46,7 +46,7 @@ public:
   bool wait_deq() {
     if (quit_.load() || !queue_.empty()) return true;
     std::unique_lock<std::mutex> lock(mutex_);
-    return cv_deq_.wait_for(lock, timeout,
+    return cv_deq_.wait_for(lock, timeout_,
                             [this]{return quit_.load() || !queue_.empty();});
   }
 
@@ -88,5 +88,6 @@ public:
 
   void terminate() {
     quit_.store(true);
+    cv_deq_.notify_all();
   }
 };

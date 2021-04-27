@@ -53,6 +53,18 @@ public:
 };
 
 class LogBufferPool {
+private:
+  std::atomic<unsigned int> my_mutex_;
+  void my_lock() {
+    for (;;) {
+      unsigned int lock = 0;
+      if (my_mutex_.compare_exchange_weak(lock, 1)) return;
+      std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+    }
+  }
+  void my_unlock() {
+    my_mutex_.store(0);
+  }
 public:
   LogQueue *queue_;
   std::mutex mutex_;
@@ -79,7 +91,9 @@ public:
       pool_.push_back(&buffer_[i]);
     }
     numa_set_interleave_mask(mask);
+    my_mutex_.store(0);
   }
+  bool is_ready();
   void push(std::uint64_t tid, NotificationId &nid,
             std::vector<WriteElement<Tuple>> &write_set,
             char *val, bool new_epoch_begins);

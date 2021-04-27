@@ -10,14 +10,17 @@ void LogBufferPool::push(std::uint64_t tid, NotificationId &nid,
                          char *val, bool new_epoch_begins) {
   nid.tid_ = tid;
   nid.t_mid_ = rdtscp();
+  assert(current_buffer_ != NULL);
   // check buffer capa
   if (current_buffer_->log_set_size_ + write_set.size() > LOG_BUFFER_SIZE
       || new_epoch_begins) {
     publish();
   }
+  while(!is_ready()) {std::this_thread::sleep_for(std::chrono::microseconds(10));}
+  if (quit_) return;
   current_buffer_->push(tid, nid, write_set, val);
   // buffer full
-  if (current_buffer_->log_set_size_ == LOG_BUFFER_SIZE) {
+  if (current_buffer_->log_set_size_ + FLAGS_max_ope > LOG_BUFFER_SIZE) {
     publish();
   }
   auto t = rdtscp();
@@ -43,44 +46,52 @@ void LogBuffer::push(std::uint64_t tid, NotificationId &nid,
   assert(min_epoch_ == max_epoch_);
 }
 
+bool LogBufferPool::is_ready() {
+  if (current_buffer_ != NULL || quit_)
+    return true;
+  bool r = false;
+  my_lock();
+  //std::lock_guard<std::mutex> lock(mutex_);
+  if (!pool_.empty()) {
+    current_buffer_ = pool_.back();
+    pool_.pop_back();
+    r = true;
+  }
+  my_unlock();
+  return r;
+}
+
 static std::mutex smutex;
 static bool first = true;
 
 void LogBufferPool::publish() {
   uint64_t t = rdtscp();
+  while(!is_ready()) {usleep(5);}
+  assert(current_buffer_ != NULL);
   // enqueue
-  queue_->enq(current_buffer_);
-  // pool empty message
-  if (pool_.empty() && first) {
-    std::lock_guard<std::mutex> lock(smutex);
-    if (first) {
-      std::cerr << "Back pressure." << std::endl;
-      first = false;
-    }
-  }
-  // take buffer from pool
-  {
-    std::unique_lock<std::mutex> lock(mutex_);
-    cv_deq_.wait(lock, [this]{return quit_ || !pool_.empty();});
-    current_buffer_ = pool_.back();
-    pool_.pop_back();
+  if (!current_buffer_->empty()) {
+    LogBuffer *p = current_buffer_;
+    current_buffer_ = NULL;
+    queue_->enq(p);
   }
   publish_latency_ += rdtscp() - t;
   publish_counts_++;
 }
 
 void LogBufferPool::return_buffer(LogBuffer *lb) {
-  if (quit_) return;
-  std::lock_guard<std::mutex> lock(mutex_);
+  //std::lock_guard<std::mutex> lock(mutex_);
+  my_lock();
   pool_.emplace_back(lb);
+  my_unlock();
   cv_deq_.notify_one();
 }
 
 void LogBufferPool::terminate(Result &myres) {
   quit_ = true;
-  if (!current_buffer_->empty()) {
-    publish();
-  }
+  if (current_buffer_ != NULL)
+    if (!current_buffer_->empty()) {
+      publish();
+    }
   myres.local_txn_latency_ = txn_latency_;
   myres.local_bkpr_latency_ = bkpr_latency_;
   myres.local_publish_latency_ = publish_latency_;
